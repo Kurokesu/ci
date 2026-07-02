@@ -38,7 +38,10 @@ jobs:
           shopt -s nullglob
           mkdir -p release-assets
           for dir in artifacts/*/; do
-            name=$(basename "$dir")
+            # GitHub sanitizes release asset names, turning '~' into
+            # '.', so mangle it to '_' like the packaging tag. Renaming
+            # here keeps SHA256SUMS recording the published names.
+            name=$(basename "$dir" | tr '~' '_')
             ( cd "$dir"
               files=( *.deb *.changes *.buildinfo )
               keep=()

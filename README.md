@@ -103,6 +103,7 @@ Canonical names in `scripts/` are family-suffixed (`release-<family>.sh`) so sib
 | `debian/changelog` and `.deb` metadata | `-` becomes `~` | `0.2.0~beta.1-1` |
 | Source tag | `v` plus semver | `v0.2.0-beta.1` |
 | Packaging tag | `~` becomes `_` (DEP-14) | `debian/0.2.0_beta.1-1` |
+| Release asset tarball | `~` becomes `_` (GitHub forbids `~` in asset names) | `<package>_0.2.0_beta.1-1.tar.gz` |
 
 The pre-release grammar is machine-enforced as `(alpha|beta|rc).N`, the range where dpkg and semver ordering agree. `release-dkms.sh --prepare` checks it before opening a changelog entry and the `dkms-release.yml` preflight checks it on every tag. A future apt publish job must refuse `~` versions into the stable suite.
 
