@@ -25,6 +25,14 @@ case "${1:-}" in
 	*) echo "usage: ./release.sh [--prepare | --execute]   (no args = dry run)" >&2; exit 2 ;;
 esac
 
+# Version forms. dkms.conf carries semver (0.2.0-beta.1). Debian
+# metadata swaps the pre-release hyphen for '~' (0.2.0~beta.1), which
+# dpkg orders before the release. Tag names cannot carry '~': the
+# source tag restores semver, the packaging tag uses '_' (DEP-14).
+to_deb()    { printf '%s\n' "$1" | sed 's/-/~/g'; }
+to_semver() { printf '%s\n' "$1" | sed 's/~/-/g'; }
+to_ref()    { printf '%s\n' "$1" | sed 's/~/_/g'; }
+
 if [ "$MODE" = prepare ]; then
 	[ -f debian/changelog ] || {
 		echo "ERROR: no debian/changelog here. Run from the packaging worktree." >&2
@@ -42,12 +50,18 @@ if [ "$MODE" = prepare ]; then
 		echo "ERROR: no PACKAGE_VERSION in dkms.conf on ${REMOTE}/${SRC_BRANCH}." >&2
 		exit 1
 	}
+	# Only the grammar where dpkg and semver ordering agree.
+	printf '%s' "$DKMS_VER" | grep -Eq '^[0-9]+(\.[0-9]+)*(-(alpha|beta|rc)\.[0-9]+)?$' || {
+		echo "ERROR: dkms.conf version '${DKMS_VER}' is not X.Y.Z or X.Y.Z-(alpha|beta|rc).N." >&2
+		exit 1
+	}
+	DKMS_VER=$(to_deb "$DKMS_VER")
 	CUR=$(dpkg-parsechangelog -SVersion)
 	TAG_VER=${CUR#*:}
 	CUR_UPSTREAM=${TAG_VER%-*}
 	# The packaging tag marks the top entry released. No tag means the
 	# entry is still pending, so never open another one on top of it.
-	if ! git rev-parse -q --verify "refs/tags/debian/${TAG_VER}" >/dev/null; then
+	if ! git rev-parse -q --verify "refs/tags/debian/$(to_ref "$TAG_VER")" >/dev/null; then
 		if [ "$DKMS_VER" = "$CUR_UPSTREAM" ]; then
 			echo "Entry ${CUR} already prepared and unreleased - nothing to do."
 			echo "Edit it, commit, push, then run ./release.sh."
@@ -89,8 +103,8 @@ FULL=$(printf '%s\n' "$CHANGELOG" | dpkg-parsechangelog -l- -SVersion)
 # Strip any epoch. Colons are illegal in git refs, so no tag carries one.
 TAG_VER=${FULL#*:}
 UPSTREAM=${TAG_VER%-*}
-SRC_TAG="v${UPSTREAM}"
-PKG_TAG="debian/${TAG_VER}"
+SRC_TAG="v$(to_semver "$UPSTREAM")"
+PKG_TAG="debian/$(to_ref "$TAG_VER")"
 PKG_SHA=$(git rev-parse "${REMOTE}/${PKG_BRANCH}")
 
 # Reuse the source tag across packaging-only rebuilds (-2, -3). Keep an
@@ -105,11 +119,13 @@ else
 fi
 
 # Catch version drift before any tags exist. The build guard in
-# debian/rules would fail too, but only mid-release.
+# debian/rules would fail too, but only mid-release. Compare in
+# Debian form, the changelog's native one.
 DKMS_VER=$(git show "${SRC_SHA}:dkms.conf" \
 	| sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p')
+DKMS_VER=$(to_deb "$DKMS_VER")
 if [ "$DKMS_VER" != "$UPSTREAM" ]; then
-	echo "ERROR: dkms.conf at ${SRC_SHA} says '${DKMS_VER}'," >&2
+	echo "ERROR: dkms.conf at ${SRC_SHA} maps to '${DKMS_VER}'," >&2
 	echo "       but debian/changelog says '${UPSTREAM}'." >&2
 	echo "       Bump dkms.conf on ${SRC_BRANCH} to match." >&2
 	exit 1
@@ -171,7 +187,7 @@ case "$ANSWER" in
 esac
 
 if [ "$CREATE_SRC" -eq 1 ]; then
-	git tag -a "$SRC_TAG" "$SRC_SHA" -m "${PKG} ${UPSTREAM}"
+	git tag -a "$SRC_TAG" "$SRC_SHA" -m "${PKG} $(to_semver "$UPSTREAM")"
 fi
 git rev-parse -q --verify "refs/tags/${PKG_TAG}" >/dev/null \
 	|| git tag -a "$PKG_TAG" "$PKG_SHA" -m "${PKG} Debian release ${FULL}"
