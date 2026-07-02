@@ -1,0 +1,5 @@
+kurokesu-selftest-dkms (1.0.0-1) unstable; urgency=medium
+
+  * Selftest fixture.
+
+ -- Kurokesu <info@kurokesu.com>  Thu, 02 Jul 2026 11:15:00 +0300

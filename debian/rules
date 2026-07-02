@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/pkg-info.mk
+
+DKMS_VERSION := $(shell sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p' dkms.conf)
+DKMS_DEST = usr/src/kurokesu-selftest-dkms-$(DEB_VERSION_UPSTREAM)
+
+%:
+	dh $@ --with dkms
+
+# The module is built on target by DKMS at install time, not during
+# packaging. Skipping the upstream build keeps the package buildable in
+# a container that has no kernel headers.
+override_dh_auto_build:
+
+# dkms.conf and the sources must land in the same versioned tree, so the
+# dkms.conf and changelog versions have to match. Assert before shipping.
+override_dh_install:
+	test "$(DKMS_VERSION)" = "$(DEB_VERSION_UPSTREAM)" \
+		|| { echo "ERROR: dkms.conf PACKAGE_VERSION ($(DKMS_VERSION)) != changelog upstream ($(DEB_VERSION_UPSTREAM))." >&2; exit 1; }
+	dh_install selftest.c Makefile $(DKMS_DEST)

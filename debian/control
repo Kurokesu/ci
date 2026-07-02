@@ -1,0 +1,16 @@
+Source: kurokesu-selftest-dkms
+Section: kernel
+Priority: optional
+Maintainer: Kurokesu <info@kurokesu.com>
+Build-Depends: debhelper-compat (= 13), dh-dkms
+Standards-Version: 4.7.0
+Homepage: https://github.com/Kurokesu/ci
+Rules-Requires-Root: no
+
+Package: kurokesu-selftest-dkms
+Architecture: all
+Depends: ${misc:Depends}, dkms
+Description: Kurokesu CI selftest fixture (DKMS)
+ Dummy DKMS package exercising the dkms-build.yml reusable workflow.
+ Built by selftest.yml from the selftest/upstream and selftest/recipe
+ branches. Not for installation.
