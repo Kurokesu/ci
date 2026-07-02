@@ -1,0 +1,136 @@
+name: Build DKMS .deb
+
+# Builds a DKMS source package plus its arch:all .deb in a clean
+# container. The package name comes from the recipe's debian/changelog
+# and debian/control drives the build dependencies, so callers pass
+# nothing repo-specific.
+
+on:
+  workflow_call:
+    inputs:
+      upstream-ref:
+        description: Git ref for the driver source checkout (branch or tag)
+        type: string
+        required: true
+      source-repo:
+        description: owner/repo of the driver source (default caller repo)
+        type: string
+        required: false
+        default: ''
+      recipe-repo:
+        description: owner/repo of the packaging recipe (default caller repo)
+        type: string
+        required: false
+        default: ''
+      recipe-ref:
+        description: Git ref for the recipe checkout (default caller sha)
+        type: string
+        required: false
+        default: ''
+      container-image:
+        description: Image the package is built in
+        type: string
+        required: false
+        default: debian:trixie
+    outputs:
+      package:
+        description: Source package name from the recipe changelog
+        value: ${{ jobs.build.outputs.package }}
+      packaging-version:
+        description: Full Debian version from the recipe changelog
+        value: ${{ jobs.build.outputs.packaging }}
+      artifact:
+        description: Name of the uploaded build artifact
+        value: ${{ jobs.build.outputs.package }}_${{ jobs.build.outputs.packaging }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build source package
+    runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.version.outputs.package }}
+      packaging: ${{ steps.version.outputs.packaging }}
+    steps:
+      - name: Checkout packaging recipe (debian/)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          repository: ${{ inputs.recipe-repo || github.repository }}
+          ref: ${{ inputs.recipe-ref || github.sha }}
+          path: recipe
+
+      - name: Checkout driver source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          repository: ${{ inputs.source-repo || github.repository }}
+          ref: ${{ inputs.upstream-ref }}
+          path: upstream
+
+      - name: Compute package name and versions from changelog
+        id: version
+        run: |
+          set -euo pipefail
+          command -v dpkg-parsechangelog >/dev/null \
+            || sudo apt-get install -y --no-install-recommends dpkg-dev
+          PKG=$(dpkg-parsechangelog -l recipe/debian/changelog -SSource)
+          PACKAGING=$(dpkg-parsechangelog -l recipe/debian/changelog -SVersion)
+          UPSTREAM=${PACKAGING%-*}
+          echo "package=${PKG}"          >> "$GITHUB_OUTPUT"
+          echo "packaging=${PACKAGING}"  >> "$GITHUB_OUTPUT"
+          echo "upstream=${UPSTREAM}"    >> "$GITHUB_OUTPUT"
+          echo "Package:           ${PKG}"
+          echo "Packaging version: ${PACKAGING}"
+          echo "Upstream version:  ${UPSTREAM}"
+
+      - name: Build source + binary package in a clean container
+        env:
+          IMAGE: ${{ inputs.container-image }}
+          PKG: ${{ steps.version.outputs.package }}
+          UPSTREAM: ${{ steps.version.outputs.upstream }}
+        run: |
+          set -euo pipefail
+          docker run --rm -e PKG -e UPSTREAM \
+            -v "$PWD":/w -w /w \
+            "$IMAGE" bash -euo pipefail -c '
+              apt-get update -qq
+              apt-get install -y --no-install-recommends \
+                build-essential dpkg-dev git ca-certificates
+              git config --global --add safe.directory /w/upstream
+
+              # A pristine orig tarball straight from the source ref, so the
+              # source package matches the checked-out commit exactly.
+              cd upstream
+              git archive --format=tar --prefix="${PKG}-${UPSTREAM}/" HEAD \
+                | gzip -n > "/w/${PKG}_${UPSTREAM}.orig.tar.gz"
+
+              # Lay the debian/ recipe over the extracted source, install
+              # what its control file declares and build the full source
+              # package plus the arch:all .deb.
+              cd /w
+              tar xf "${PKG}_${UPSTREAM}.orig.tar.gz"
+              cp -r recipe/debian "${PKG}-${UPSTREAM}/"
+              cd "${PKG}-${UPSTREAM}"
+              apt-get build-dep -y --no-install-recommends ./
+              dpkg-buildpackage -us -uc
+            '
+          echo "=== build products ==="
+          ls -la ./*.deb ./*.dsc ./*.changes ./*.buildinfo \
+            ./*.orig.tar.* ./*.debian.tar.*
+
+      - name: Upload .deb set + source package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.version.outputs.package }}_${{ steps.version.outputs.packaging }}
+          path: |
+            ./*.deb
+            ./*.dsc
+            ./*.changes
+            ./*.buildinfo
+            ./*.orig.tar.*
+            ./*.debian.tar.*
+          if-no-files-found: error
+          retention-days: 30

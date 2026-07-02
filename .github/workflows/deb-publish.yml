@@ -1,0 +1,61 @@
+name: Publish GitHub Release
+
+# Creates a pre-release on the caller's repo carrying the signed
+# release-assets artifact. A re-run on an existing release refreshes
+# its assets and leaves title, notes and the Pre-release flag intact.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag on the caller's repo (also the title)
+        type: string
+        required: true
+      notes:
+        description: Initial release notes for a new release
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets
+          path: release-assets/
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+
+          # Clear the assets first then re-upload so a packaging rebuild
+          # (-1 -> -2) cannot leave the old revision's tarballs beside
+          # the new SHA256SUMS.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' \
+              | xargs -r -I{} gh release delete-asset "$TAG" {} --yes --repo "$GITHUB_REPOSITORY"
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --clobber release-assets/*
+            exit 0
+          fi
+
+          # Notes seed from the input and get edited by hand before
+          # promoting from Pre-release to Latest.
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" \
+            --prerelease \
+            --notes "$NOTES" \
+            release-assets/*

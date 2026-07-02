@@ -1,0 +1,116 @@
+name: DKMS release
+
+# Full release pipeline for a DKMS packaging repo on a
+# debian/<full-version> tag push: verify the paired source tag, build,
+# sign, publish. Cut tags with the release script (scripts/release-dkms.sh
+# canonical, deployed as release.sh on packaging branches).
+
+on:
+  workflow_call:
+    secrets:
+      ARCHIVE_GPG_SIGNING_KEY:
+        description: ASCII-armored private signing key, passphrase-less
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Verify paired source tag
+    runs-on: ubuntu-latest
+    outputs:
+      packaging-version: ${{ steps.parse.outputs.packaging }}
+      upstream-version: ${{ steps.parse.outputs.upstream }}
+      upstream-ref: ${{ steps.parse.outputs.ref }}
+      changelog: ${{ steps.notes.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Parse packaging tag
+        id: parse
+        run: |
+          set -euo pipefail
+          case "$GITHUB_REF" in
+            refs/tags/debian/*) ;;
+            *) echo "::error::Not a debian/* tag push: ${GITHUB_REF}."; exit 1 ;;
+          esac
+          PACKAGING="${GITHUB_REF#refs/tags/debian/}"
+          UPSTREAM="${PACKAGING%-*}"
+          UPSTREAM_REF="v${UPSTREAM}"
+          echo "packaging=${PACKAGING}" >> "$GITHUB_OUTPUT"
+          echo "upstream=${UPSTREAM}"   >> "$GITHUB_OUTPUT"
+          echo "ref=${UPSTREAM_REF}"    >> "$GITHUB_OUTPUT"
+          echo "Packaging tag : debian/${PACKAGING}"
+          echo "Upstream ref  : ${UPSTREAM_REF}"
+
+      - name: Verify source tag exists (fail fast)
+        run: |
+          set -euo pipefail
+          REF="${{ steps.parse.outputs.ref }}"
+          if ! git rev-parse "refs/tags/${REF}" >/dev/null 2>&1; then
+            echo "::error::Source tag '${REF}' does not exist on this repo."
+            echo "::error::Tag the source on main with this revision-less name,"
+            echo "::error::push it, then re-push the packaging tag to trigger this workflow."
+            exit 1
+          fi
+          echo "OK: source tag ${REF} -> $(git rev-parse "refs/tags/${REF}")"
+
+      - name: Verify tag matches debian/changelog
+        # Guards hand-made tags. The checkout on a tag push is the tagged commit.
+        run: |
+          set -euo pipefail
+          command -v dpkg-parsechangelog >/dev/null \
+            || sudo apt-get install -y --no-install-recommends dpkg-dev
+          CHANGELOG=$(dpkg-parsechangelog -SVersion)
+          # The packaging tag is epoch-free (colons are illegal in git refs),
+          # so compare against the changelog version with any epoch stripped.
+          CHANGELOG_TAG=${CHANGELOG#*:}
+          TAG="${{ steps.parse.outputs.packaging }}"
+          if [ "${CHANGELOG_TAG}" != "${TAG}" ]; then
+            echo "::error::Packaging tag says '${TAG}' but debian/changelog at the tagged commit says '${CHANGELOG}'."
+            echo "::error::Retag the commit with a matching changelog."
+            exit 1
+          fi
+          echo "OK: tag matches changelog (${CHANGELOG})"
+
+      - name: Extract changelog entry for release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          # Top entry only: drop the header line, stop at the trailer, then
+          # trim surrounding blank lines.
+          BODY=$(awk 'NR==1{next} /^ -- /{exit} {print}' debian/changelog \
+            | sed -e '/./,$!d' | tac | sed -e '/./,$!d' | tac)
+          {
+            echo "changelog<<CHANGELOG_EOF"
+            printf '%s\n' "$BODY"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  # Nested references are fully qualified. A relative path would resolve
+  # against the caller's repo, which has no copy of these workflows.
+  build:
+    needs: preflight
+    uses: Kurokesu/ci/.github/workflows/dkms-build.yml@main
+    with:
+      upstream-ref: ${{ needs.preflight.outputs.upstream-ref }}
+
+  sign:
+    needs: build
+    uses: Kurokesu/ci/.github/workflows/deb-sign.yml@main
+    secrets:
+      ARCHIVE_GPG_SIGNING_KEY: ${{ secrets.ARCHIVE_GPG_SIGNING_KEY }}
+
+  publish:
+    needs: [preflight, sign]
+    uses: Kurokesu/ci/.github/workflows/deb-publish.yml@main
+    permissions:
+      contents: write
+    with:
+      tag: ${{ needs.preflight.outputs.upstream-ref }}
+      notes: ${{ needs.preflight.outputs.changelog }}
