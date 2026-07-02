@@ -48,7 +48,7 @@ permissions:
 
 jobs:
   build:
-    name: Build source package
+    name: Source package
     runs-on: ubuntu-latest
     outputs:
       package: ${{ steps.version.outputs.package }}

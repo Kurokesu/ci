@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   sign:
-    name: Bundle and sign
+    name: Release assets
     runs-on: ubuntu-latest
     steps:
       # Inside a reusable workflow checkout defaults to the caller's
