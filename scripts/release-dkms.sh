@@ -118,16 +118,24 @@ echo "Packaging tag: ${PKG_TAG} -> ${PKG_SHA} (${REMOTE}/${PKG_BRANCH})"
 # Block unless the packaging tip is CI-green. An unreachable API blocks
 # too. Releasing blind is as risky as releasing red.
 BRANCH_ENC=$(printf %s "$PKG_BRANCH" | sed 's#/#%2F#g')
-CONCLUSION=$(curl -sf --max-time 10 \
+CI=$(curl -sf --max-time 10 \
 	"https://api.github.com/repos/${REPO}/actions/runs?branch=${BRANCH_ENC}&per_page=1" \
 	2>/dev/null \
 	| python3 -c 'import json,sys
 r = json.load(sys.stdin)["workflow_runs"]
-print(r[0]["conclusion"] or "in_progress" if r else "none")' \
-	2>/dev/null) || CONCLUSION=unknown
+print(((r[0]["conclusion"] or "in_progress") + " " + r[0]["head_sha"]) if r else "none -")' \
+	2>/dev/null) || CI="unknown -"
+CONCLUSION=${CI% *}
+CI_SHA=${CI#* }
 if [ "$CONCLUSION" != "success" ]; then
 	echo "ERROR: latest CI on ${PKG_BRANCH} is '${CONCLUSION}', not 'success'." >&2
 	echo "       Wait for a green run on the packaging tip." >&2
+	exit 1
+fi
+# A green run for some other commit is stale, not proof for this tip.
+if [ "$CI_SHA" != "$PKG_SHA" ]; then
+	echo "ERROR: that run is for ${CI_SHA}," >&2
+	echo "       not the packaging tip ${PKG_SHA}. Wait for CI on the tip." >&2
 	exit 1
 fi
 
