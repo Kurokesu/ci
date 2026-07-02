@@ -10,5 +10,7 @@ KDIR ?= /lib/modules/$(shell uname -r)/build
 module:
 	$(MAKE) -C $(KDIR) M=$(CURDIR) modules
 
+# No kernel tree involved, so packaging clean works in a container
+# without headers. dpkg-buildpackage runs clean before every build.
 clean:
-	$(MAKE) -C $(KDIR) M=$(CURDIR) clean
+	rm -f *.o *.ko *.mod *.mod.c *.mod.o .*.cmd Module.symvers modules.order
