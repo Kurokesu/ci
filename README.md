@@ -91,7 +91,7 @@ Canonical names in `scripts/` are family-suffixed (`release-<family>.sh`) so sib
 ./release.sh --execute   # tag and push atomically
 ```
 
-`dkms.conf` on the calling repo's `main` is the one place a human bumps a version. The script derives everything else from `debian/changelog` and refuses on version drift, red CI or retag attempts.
+`dkms.conf` on the calling repo's `main` is the one place a human bumps a version. The script derives everything else from `debian/changelog` and refuses on version drift, red CI or retag attempts. `--prepare` attributes the changelog entry from the operator's exported `DEBEMAIL` (`Name <email>`) and refuses to run without it. The opened entry carries an `EDIT ME` placeholder and the dry run and `--execute` refuse to cut tags while it remains, so the release notes always get a written entry.
 
 ## Versioning
 
@@ -105,7 +105,7 @@ Canonical names in `scripts/` are family-suffixed (`release-<family>.sh`) so sib
 | Packaging tag | `~` becomes `_` (DEP-14) | `debian/0.2.0_beta.1-1` |
 | Release asset tarball | `~` becomes `_` (GitHub forbids `~` in asset names) | `<package>_0.2.0_beta.1-1.tar.gz` |
 
-The pre-release grammar is machine-enforced as `(alpha|beta|rc).N`, the range where dpkg and semver ordering agree. `release-dkms.sh --prepare` checks it before opening a changelog entry and the `dkms-release.yml` preflight checks it on every tag. A future apt publish job must refuse `~` versions into the stable suite.
+The pre-release grammar is machine-enforced as `(alpha|beta|rc).N`, the range where dpkg and semver ordering agree. `release-dkms.sh --prepare` checks it before opening a changelog entry and the `dkms-release.yml` preflight checks it on every tag. The apt archive refuses `~` versions into its stable suites at the manifest level.
 
 ## Keys
 
