@@ -30,7 +30,12 @@ if [ "$MODE" = prepare ]; then
 		echo "ERROR: no debian/changelog here. Run from the packaging worktree." >&2
 		exit 1
 	}
-	git fetch --quiet "$REMOTE" "$SRC_BRANCH"
+	git fetch --tags --quiet "$REMOTE" "$SRC_BRANCH" "$PKG_BRANCH"
+	# dch edits this checkout, so refuse a base the remote moved past.
+	git merge-base --is-ancestor "${REMOTE}/${PKG_BRANCH}" HEAD || {
+		echo "ERROR: checkout is behind ${REMOTE}/${PKG_BRANCH}. Pull first." >&2
+		exit 1
+	}
 	DKMS_VER=$(git show "${REMOTE}/${SRC_BRANCH}:dkms.conf" \
 		| sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p')
 	[ -n "$DKMS_VER" ] || {
@@ -38,7 +43,20 @@ if [ "$MODE" = prepare ]; then
 		exit 1
 	}
 	CUR=$(dpkg-parsechangelog -SVersion)
-	CUR_UPSTREAM=${CUR#*:}; CUR_UPSTREAM=${CUR_UPSTREAM%-*}
+	TAG_VER=${CUR#*:}
+	CUR_UPSTREAM=${TAG_VER%-*}
+	# The packaging tag marks the top entry released. No tag means the
+	# entry is still pending, so never open another one on top of it.
+	if ! git rev-parse -q --verify "refs/tags/debian/${TAG_VER}" >/dev/null; then
+		if [ "$DKMS_VER" = "$CUR_UPSTREAM" ]; then
+			echo "Entry ${CUR} already prepared and unreleased - nothing to do."
+			echo "Edit it, commit, push, then run ./release.sh."
+			exit 0
+		fi
+		echo "ERROR: top entry ${CUR} is unreleased, but dkms.conf on ${SRC_BRANCH} says ${DKMS_VER}." >&2
+		echo "       Release ${CUR} first, or fix the mismatch by hand." >&2
+		exit 1
+	fi
 	# Same upstream means a packaging-only rebuild, so bump the revision.
 	if [ "$DKMS_VER" = "$CUR_UPSTREAM" ]; then
 		NEW="${DKMS_VER}-$(( ${CUR##*-} + 1 ))"
