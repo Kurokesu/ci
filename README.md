@@ -77,7 +77,7 @@ Creates a pre-release on the caller's repo from the `release-assets` artifact. A
 
 ## Selftest
 
-`selftest.yml` is this repo's own CI. It calls `dkms-build.yml` on `pull_request` and `workflow_dispatch` against the dummy DKMS fixture on the `selftest/upstream` and `selftest/recipe` orphan branches, paired like a caller's `main` and `debian/latest`, and asserts the artifact set. Sign and publish have no selftest.
+`selftest.yml` is this repo's own CI. It calls `dkms-build.yml` against the dummy DKMS fixtures on the `selftest/*` orphan branches, each pair arranged like a caller's `main` and `debian/latest`: a plain version on `selftest/upstream` + `selftest/recipe` and a semver pre-release on the `selftest/*-pre` pair. Both artifact sets are asserted. Sign and publish have no selftest.
 
 ## Release scripts
 
@@ -92,6 +92,19 @@ Canonical names in `scripts/` are family-suffixed (`release-<family>.sh`) so sib
 ```
 
 `dkms.conf` on the calling repo's `main` is the one place a human bumps a version. The script derives everything else from `debian/changelog` and refuses on version drift, red CI or retag attempts.
+
+## Versioning
+
+`dkms.conf` carries the version in semver form. Plain `X.Y.Z` versions pass through every layer unchanged. Semver pre-releases change spelling per layer, because Debian spells pre-release with `~` and git refs cannot carry `~` at all:
+
+| Layer | Form | Example |
+| --- | --- | --- |
+| `dkms.conf` and the DKMS tree in `/usr/src` | semver | `0.2.0-beta.1` |
+| `debian/changelog` and `.deb` metadata | `-` becomes `~` | `0.2.0~beta.1-1` |
+| Source tag | `v` plus semver | `v0.2.0-beta.1` |
+| Packaging tag | `~` becomes `_` (DEP-14) | `debian/0.2.0_beta.1-1` |
+
+The pre-release grammar is machine-enforced as `(alpha|beta|rc).N`, the range where dpkg and semver ordering agree. `release-dkms.sh --prepare` checks it before opening a changelog entry and the `dkms-release.yml` preflight checks it on every tag. A future apt publish job must refuse `~` versions into the stable suite.
 
 ## Keys
 
