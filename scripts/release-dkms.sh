@@ -103,6 +103,12 @@ FULL=$(printf '%s\n' "$CHANGELOG" | dpkg-parsechangelog -l- -SVersion)
 # Strip any epoch. Colons are illegal in git refs, so no tag carries one.
 TAG_VER=${FULL#*:}
 UPSTREAM=${TAG_VER%-*}
+# Same grammar --prepare enforces, in changelog form. A hand-edited
+# entry fails here, not as pushed tags the preflight then rejects.
+printf '%s' "$UPSTREAM" | grep -Eq '^[0-9]+(\.[0-9]+)*(~(alpha|beta|rc)\.[0-9]+)?$' || {
+	echo "ERROR: changelog version '${UPSTREAM}' is not X.Y.Z or X.Y.Z~(alpha|beta|rc).N." >&2
+	exit 1
+}
 SRC_TAG="v$(to_semver "$UPSTREAM")"
 PKG_TAG="debian/$(to_ref "$TAG_VER")"
 PKG_SHA=$(git rev-parse "${REMOTE}/${PKG_BRANCH}")
