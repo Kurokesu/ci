@@ -1,5 +1,7 @@
 # Kurokesu CI
 
+[![Selftest](https://github.com/Kurokesu/ci/actions/workflows/selftest.yml/badge.svg)](https://github.com/Kurokesu/ci/actions/workflows/selftest.yml)
+
 Shared release plumbing for Kurokesu repos: reusable GitHub Actions workflows, canonical release scripts and the archive public keyring.
 
 Workflows group by release family. The `dkms-*` pair serves DKMS driver packaging repos. `deb-sign.yml` and `deb-publish.yml` are family-agnostic building blocks for any `.deb` release pipeline. Callers reference the workflows here with thin shims at `@main`.
