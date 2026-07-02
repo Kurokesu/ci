@@ -133,6 +133,8 @@ jobs:
   sign:
     needs: build
     uses: Kurokesu/ci/.github/workflows/deb-sign.yml@main
+    with:
+      artifact: ${{ needs.build.outputs.artifact }}
     secrets:
       ARCHIVE_GPG_SIGNING_KEY: ${{ secrets.ARCHIVE_GPG_SIGNING_KEY }}
 
