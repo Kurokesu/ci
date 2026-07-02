@@ -81,7 +81,7 @@ Creates a pre-release on the caller's repo from the `release-assets` artifact. A
 
 ## Release scripts
 
-Canonical names in `scripts/` are family-suffixed (`release-<family>.sh`) so sibling families can sit beside each other. Each deploys to its callers as plain `release.sh`, byte-identical in content.
+Canonical names in `scripts/` are family-suffixed (`release-<family>.sh`) so sibling families can sit beside each other. Callers carry no copy. The packaging branch root has a thin `release.sh` launcher that resolves the same ref as the workflow shims to a commit SHA, prints it for the audit trail, fetches the canonical script at that SHA and runs it with the caller's arguments. Fetching at the shims' ref keeps maintainer tooling and CI on one protocol version, and script fixes propagate without caller commits.
 
 `scripts/release-dkms.sh` cuts a paired-tag DKMS release. Operator commands:
 
