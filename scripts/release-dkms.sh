@@ -72,24 +72,33 @@ if [ "$MODE" = prepare ]; then
 		exit 1
 	fi
 	# Same upstream means a packaging-only rebuild, so bump the revision.
+	# EDIT ME blocks the release until the operator writes a real entry.
 	if [ "$DKMS_VER" = "$CUR_UPSTREAM" ]; then
 		NEW="${DKMS_VER}-$(( ${CUR##*-} + 1 ))"
-		MSG="Packaging update."
+		MSG="Packaging update. EDIT ME: describe the rebuild reason."
 	else
 		NEW="${DKMS_VER}-1"
-		MSG="New upstream release."
+		MSG="New upstream release. EDIT ME: describe the changes."
 	fi
 	dpkg --compare-versions "$NEW" gt "$CUR" || {
 		echo "ERROR: computed ${NEW} does not advance ${CUR}." >&2
 		echo "       Bump dkms.conf on ${SRC_BRANCH} first." >&2
 		exit 1
 	}
-	# A "name <email>" DEBEMAIL gives dch both attribution fields.
-	DEBEMAIL=$(sed -n 's/^Maintainer:[[:space:]]*//p' debian/control) \
-		dch --newversion "$NEW" --distribution unstable \
+	# dch takes attribution from DEBEMAIL. A "Name <email>" value fills
+	# both fields. Refusing beats guessing a wrong author into a
+	# released changelog.
+	[ -n "${DEBEMAIL:-}" ] || {
+		echo "ERROR: DEBEMAIL is unset, the changelog entry needs an author." >&2
+		echo "       export DEBEMAIL='Your Name <you@kurokesu.com>' and rerun." >&2
+		exit 1
+	}
+	export DEBEMAIL
+	dch --newversion "$NEW" --distribution unstable \
 		--force-distribution "$MSG"
-	echo "Opened ${NEW} in debian/changelog."
-	echo "Edit the entry, commit, push, then rerun ./release.sh once CI is green."
+	echo "Opened ${NEW} in debian/changelog with an EDIT ME placeholder."
+	echo "Describe the release, commit, push, then rerun ./release.sh once CI is green."
+	echo "The release stays blocked while EDIT ME remains in the entry."
 	exit 0
 fi
 
@@ -109,6 +118,13 @@ printf '%s' "$UPSTREAM" | grep -Eq '^[0-9]+(\.[0-9]+)*(~(alpha|beta|rc)\.[0-9]+)
 	echo "ERROR: changelog version '${UPSTREAM}' is not X.Y.Z or X.Y.Z~(alpha|beta|rc).N." >&2
 	exit 1
 }
+# The top entry seeds the release notes. Block the --prepare
+# placeholder from ever reaching them.
+if printf '%s\n' "$CHANGELOG" | sed -n '2,/^ -- /p' | grep -q 'EDIT ME'; then
+	echo "ERROR: top changelog entry still carries the EDIT ME placeholder." >&2
+	echo "       Describe the release, commit, push, then rerun ./release.sh." >&2
+	exit 1
+fi
 SRC_TAG="v$(to_semver "$UPSTREAM")"
 PKG_TAG="debian/$(to_ref "$TAG_VER")"
 PKG_SHA=$(git rev-parse "${REMOTE}/${PKG_BRANCH}")
