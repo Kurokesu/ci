@@ -87,6 +87,7 @@ jobs:
           echo "Upstream version:  ${UPSTREAM}"
 
       - name: Build source + binary package in a clean container
+        id: build
         env:
           IMAGE: ${{ inputs.container-image }}
           PKG: ${{ steps.version.outputs.package }}
@@ -116,10 +117,32 @@ jobs:
               cd "${PKG}-${UPSTREAM}"
               apt-get build-dep -y --no-install-recommends ./
               dpkg-buildpackage -us -uc
-            '
+            ' 2>&1 | tee build.log
           echo "=== build products ==="
           ls -la ./*.deb ./*.dsc ./*.changes ./*.buildinfo \
             ./*.orig.tar.* ./*.debian.tar.*
+
+      # A failed build buries its cause in a long log. Repeat the error
+      # lines and the log tail on the run summary page.
+      - name: Summarize build failure
+        if: failure() && steps.build.conclusion == 'failure'
+        run: |
+          set -euo pipefail
+          # Indented matches are make echoing recipe lines, not errors.
+          ERRORS=$(grep -E 'ERROR:|error:' build.log | grep -v '^[[:space:]]' | tail -n 15) || true
+          {
+            echo "### Build failed"
+            echo '```'
+            echo "${ERRORS:-(no error lines matched, see log tail)}"
+            echo '```'
+            echo '<details><summary>Log tail</summary>'
+            echo
+            echo '```'
+            tail -n 40 build.log
+            echo '```'
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ -z "$ERRORS" ] || echo "::error::${ERRORS%%$'\n'*}"
 
       - name: Upload .deb set + source package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
