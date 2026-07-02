@@ -1,0 +1,46 @@
+name: Selftest
+
+# Exercises dkms-build.yml against the fixture on this repo's
+# selftest/upstream and selftest/recipe orphan branches and asserts the
+# artifact set. Sign and publish have no selftest.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/dkms-build.yml
+    with:
+      # Fixture branches pair like a caller's main and debian/latest.
+      # Repos default to the caller, this repo, so the selftest depends
+      # on no external state.
+      recipe-ref: selftest/recipe
+      upstream-ref: selftest/upstream
+
+  assert:
+    needs: build
+    name: Assert artifact set
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: artifacts/
+
+      - name: Check expected build products
+        run: |
+          set -euo pipefail
+          cd artifacts
+          ls -la
+          ok=1
+          for pattern in '*.deb' '*.dsc' '*.orig.tar.gz' '*.changes' '*.buildinfo'; do
+            # shellcheck disable=SC2086
+            set -- $pattern
+            [ -e "$1" ] || { echo "::error::Missing ${pattern}."; ok=0; }
+          done
+          [ "$ok" -eq 1 ]
+          echo "OK: full artifact set present."
