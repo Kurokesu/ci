@@ -22,7 +22,7 @@ case "${1:-}" in
 	--prepare) MODE=prepare ;;
 	--execute) MODE=execute ;;
 	--dry-run|'') MODE=dry-run ;;
-	*) echo "usage: $0 [--prepare | --execute]   (no args = dry run)" >&2; exit 2 ;;
+	*) echo "usage: ./release.sh [--prepare | --execute]   (no args = dry run)" >&2; exit 2 ;;
 esac
 
 if [ "$MODE" = prepare ]; then
@@ -57,7 +57,7 @@ if [ "$MODE" = prepare ]; then
 		dch --newversion "$NEW" --distribution unstable \
 		--force-distribution "$MSG"
 	echo "Opened ${NEW} in debian/changelog."
-	echo "Edit the entry, commit, push, then rerun $0 once CI is green."
+	echo "Edit the entry, commit, push, then rerun ./release.sh once CI is green."
 	exit 0
 fi
 
