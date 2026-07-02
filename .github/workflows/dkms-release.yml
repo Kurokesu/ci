@@ -39,15 +39,18 @@ jobs:
             refs/tags/debian/*) ;;
             *) echo "::error::Not a debian/* tag push: ${GITHUB_REF}."; exit 1 ;;
           esac
-          PACKAGING="${GITHUB_REF#refs/tags/debian/}"
-          # Epoch-free upstream-revision shape only. Anything else is a
-          # hand-made tag this pipeline never cut.
-          printf '%s' "$PACKAGING" | grep -Eq '^[0-9][A-Za-z0-9.+~]*-[0-9]+$' || {
-            echo "::error::Tag 'debian/${PACKAGING}' is not debian/<upstream>-<revision>."
+          RAW="${GITHUB_REF#refs/tags/debian/}"
+          # Epoch-free upstream-revision shape, pre-release grammar
+          # limited to where dpkg and semver ordering agree. '_' stands
+          # in for Debian '~', which is illegal in git refs (DEP-14).
+          printf '%s' "$RAW" | grep -Eq '^[0-9]+(\.[0-9]+)*(_(alpha|beta|rc)\.[0-9]+)?-[0-9]+$' || {
+            echo "::error::Tag 'debian/${RAW}' is not debian/X.Y.Z[_(alpha|beta|rc).N]-<revision>."
             exit 1
           }
+          PACKAGING=$(printf '%s' "$RAW" | sed 's/_/~/g')
           UPSTREAM="${PACKAGING%-*}"
-          UPSTREAM_REF="v${UPSTREAM}"
+          # Source tags carry the semver form: '~' back to '-'.
+          UPSTREAM_REF="v$(printf '%s' "$UPSTREAM" | sed 's/~/-/g')"
           echo "packaging=${PACKAGING}" >> "$GITHUB_OUTPUT"
           echo "upstream=${UPSTREAM}"   >> "$GITHUB_OUTPUT"
           echo "ref=${UPSTREAM_REF}"    >> "$GITHUB_OUTPUT"
