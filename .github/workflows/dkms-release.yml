@@ -40,6 +40,12 @@ jobs:
             *) echo "::error::Not a debian/* tag push: ${GITHUB_REF}."; exit 1 ;;
           esac
           PACKAGING="${GITHUB_REF#refs/tags/debian/}"
+          # Epoch-free upstream-revision shape only. Anything else is a
+          # hand-made tag this pipeline never cut.
+          printf '%s' "$PACKAGING" | grep -Eq '^[0-9][A-Za-z0-9.+~]*-[0-9]+$' || {
+            echo "::error::Tag 'debian/${PACKAGING}' is not debian/<upstream>-<revision>."
+            exit 1
+          }
           UPSTREAM="${PACKAGING%-*}"
           UPSTREAM_REF="v${UPSTREAM}"
           echo "packaging=${PACKAGING}" >> "$GITHUB_OUTPUT"
@@ -49,9 +55,11 @@ jobs:
           echo "Upstream ref  : ${UPSTREAM_REF}"
 
       - name: Verify source tag exists (fail fast)
+        # Tag names are outside input. env keeps them out of the script text.
+        env:
+          REF: ${{ steps.parse.outputs.ref }}
         run: |
           set -euo pipefail
-          REF="${{ steps.parse.outputs.ref }}"
           if ! git rev-parse "refs/tags/${REF}" >/dev/null 2>&1; then
             echo "::error::Source tag '${REF}' does not exist on this repo."
             echo "::error::Tag the source on main with this revision-less name,"
@@ -60,8 +68,28 @@ jobs:
           fi
           echo "OK: source tag ${REF} -> $(git rev-parse "refs/tags/${REF}")"
 
+      - name: Verify tags sit on their branches
+        # A tag on a stray commit must not release. The fetch-depth 0
+        # checkout above brings all branch heads.
+        env:
+          REF: ${{ steps.parse.outputs.ref }}
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor HEAD origin/debian/latest || {
+            echo "::error::Tagged commit $(git rev-parse HEAD) is not on debian/latest."
+            exit 1
+          }
+          SRC=$(git rev-parse "refs/tags/${REF}^{commit}")
+          git merge-base --is-ancestor "$SRC" origin/main || {
+            echo "::error::Source tag ${REF} (${SRC}) is not on main."
+            exit 1
+          }
+          echo "OK: packaging tag on debian/latest, ${REF} on main."
+
       - name: Verify tag matches debian/changelog
         # Guards hand-made tags. The checkout on a tag push is the tagged commit.
+        env:
+          TAG: ${{ steps.parse.outputs.packaging }}
         run: |
           set -euo pipefail
           command -v dpkg-parsechangelog >/dev/null \
@@ -70,7 +98,6 @@ jobs:
           # The packaging tag is epoch-free (colons are illegal in git refs),
           # so compare against the changelog version with any epoch stripped.
           CHANGELOG_TAG=${CHANGELOG#*:}
-          TAG="${{ steps.parse.outputs.packaging }}"
           if [ "${CHANGELOG_TAG}" != "${TAG}" ]; then
             echo "::error::Packaging tag says '${TAG}' but debian/changelog at the tagged commit says '${CHANGELOG}'."
             echo "::error::Retag the commit with a matching changelog."
