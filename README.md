@@ -2,35 +2,45 @@
 
 [![Selftest](https://github.com/Kurokesu/ci/actions/workflows/selftest.yml/badge.svg)](https://github.com/Kurokesu/ci/actions/workflows/selftest.yml)
 
-Shared release plumbing for Kurokesu repos: reusable GitHub Actions workflows, canonical release scripts and the archive public keyring.
+Shared CI for Kurokesu repos: reusable GitHub Actions workflows, canonical release scripts and archive public keyring. Callers reference workflows here with thin shims at `@main`, so fixes land once and propagate without caller commits.
 
-Workflows group by release family. The `dkms-*` pair serves DKMS driver packaging repos. `deb-sign.yml` and `deb-publish.yml` are family-agnostic building blocks for any `.deb` release pipeline. Callers reference the workflows here with thin shims at `@main`.
+## Workflows
 
-## DKMS workflows
+| Workflow | Purpose | Called from |
+| --- | --- | --- |
+| `kernel-code-style.yml` | clang-format plus kernel checkpatch, profile per `platform` input | driver repo `main` shim |
+| `dkms-build.yml` | DKMS source package plus arch:all `.deb` in a clean container, callers pass nothing repo-specific | packaging branch `ci.yml` shim |
+| `dkms-release.yml` | release pipeline on `debian/*` tag push: verify tags, build, sign, publish | packaging branch `release.yml` shim |
+| `deb-sign.yml` | bundle artifacts, sign `SHA256SUMS` with archive key, self-verify | `dkms-release.yml` |
+| `deb-publish.yml` | GitHub pre-release from `release-assets` artifact, re-run refreshes assets | `dkms-release.yml` |
 
-Both assume a DEP-14 layout in the calling repo: driver source on `main`, tagged `v<upstream>` per release, and packaging recipe on `debian/latest`, tagged `debian/<upstream>-<revision>`.
+`selftest.yml` is this repo's own CI. It runs `dkms-build.yml` against dummy DKMS fixtures on `selftest/*` orphan branches, one plain-version pair and one semver pre-release pair. Sign and publish have no selftest.
 
-### dkms-build.yml
+## Kernel code style
 
-Builds a DKMS source package plus its arch:all `.deb` in a clean container. Package name comes from the recipe's `debian/changelog` `Source:` field and build dependencies come from `debian/control` via `apt-get build-dep`, so callers pass nothing repo-specific.
+Two jobs: clang-format against caller's `.clang-format` and mainline `checkpatch.pl` with zero findings tolerated. checkpatch enforces Linux kernel coding style, hence the `kernel-` prefix, userspace projects should not call this. `platform` input picks the checkpatch profile. `rpi` runs `--strict`, these drivers hold the mainline bar. `jetson` drops `--strict` and ignores `TRACING_LOGGING`, NVIDIA's tegracam reference is the standard for modules that build against nvidia-oot and cannot go upstream. Full rationale in the workflow header.
 
-Inputs:
+Caller shim, `code-style.yml` on `main`:
 
-| Input | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `upstream-ref` | yes | | Ref of driver source to build (branch or tag) |
-| `source-repo` | no | caller repo | owner/repo of driver source |
-| `recipe-repo` | no | caller repo | owner/repo of packaging recipe |
-| `recipe-ref` | no | caller SHA | Ref of recipe checkout |
-| `container-image` | no | `debian:trixie` | Image the package is built in |
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  code-style:
+    uses: Kurokesu/ci/.github/workflows/kernel-code-style.yml@main
+    with:
+      platform: rpi
+```
 
-Outputs: `package`, `packaging-version` and `artifact` (name of the uploaded artifact carrying the `.deb`, `.dsc`, `.orig.tar.gz`, `.changes`, `.buildinfo` and `.debian.tar.xz`).
+## DKMS release family
 
-### dkms-release.yml
-
-Full release pipeline on a `debian/<full-version>` tag push. Verifies the paired `v<upstream>` source tag exists and the tag matches `debian/changelog`, then builds, signs and publishes a GitHub pre-release with notes seeded from the top changelog entry. Requires the `ARCHIVE_GPG_SIGNING_KEY` secret (org-level, pass with `secrets: inherit`).
-
-### Caller shims
+`dkms-build.yml` and `dkms-release.yml` assume DEP-14 layout in the calling repo: driver source on `main` tagged `v<upstream>`, packaging recipe on `debian/latest` tagged `debian/<upstream>-<revision>`. Package name and build dependencies come from the recipe. Release verifies paired tags against `debian/changelog`, then builds, signs and publishes a GitHub pre-release. Signing needs the org-level `ARCHIVE_GPG_SIGNING_KEY` secret, passed with `secrets: inherit`.
 
 `release.yml` on the packaging branch:
 
@@ -65,25 +75,9 @@ jobs:
 
 Shims live on the packaging branch, not `main`, because GitHub Actions resolves `pull_request` and tag-push triggers from a base branch's own workflow files.
 
-## Shared workflows
+### Release scripts
 
-### deb-sign.yml
-
-Bundles build artifacts into per-artifact tarballs, writes `SHA256SUMS`, signs it with the archive key and verifies the signature against `keys/kurokesu-archive-keyring.gpg` from this repo. Uploads the result as the `release-assets` artifact.
-
-### deb-publish.yml
-
-Creates a pre-release on the caller's repo from the `release-assets` artifact. A re-run refreshes assets and leaves title, notes and the Pre-release flag intact. Inputs: `tag` (release tag, also the title) and `notes` (initial notes for a new release).
-
-## Selftest
-
-`selftest.yml` is this repo's own CI. It calls `dkms-build.yml` against the dummy DKMS fixtures on the `selftest/*` orphan branches, each pair arranged like a caller's `main` and `debian/latest`: a plain version on `selftest/upstream` + `selftest/recipe` and a semver pre-release on the `selftest/*-pre` pair. Both artifact sets are asserted. Sign and publish have no selftest.
-
-## Release scripts
-
-Canonical names in `scripts/` are family-suffixed (`release-<family>.sh`) so sibling families can sit beside each other. Callers carry no copy. The packaging branch root has a thin `release.sh` launcher that resolves the same ref as the workflow shims to a commit SHA, prints it for the audit trail, fetches the canonical script at that SHA and runs it with the caller's arguments. Fetching at the shims' ref keeps maintainer tooling and CI on one protocol version, and script fixes propagate without caller commits.
-
-`scripts/release-dkms.sh` cuts a paired-tag DKMS release. Operator commands:
+Canonical scripts in `scripts/` are family-suffixed (`release-<family>.sh`). Callers carry no copy, only a thin `release.sh` launcher that resolves the shims' ref to a commit SHA, prints it for the audit trail and fetches the canonical script at that SHA. Maintainer tooling and CI stay on one protocol version.
 
 ```bash
 ./release.sh --prepare   # open a changelog entry from dkms.conf on main
@@ -91,11 +85,11 @@ Canonical names in `scripts/` are family-suffixed (`release-<family>.sh`) so sib
 ./release.sh --execute   # tag and push atomically
 ```
 
-`dkms.conf` on the calling repo's `main` is the one place a human bumps a version. The script derives everything else from `debian/changelog` and refuses on version drift, red CI or retag attempts. `--prepare` attributes the changelog entry from the operator's exported `DEBEMAIL` (`Name <email>`) and refuses to run without it. The opened entry carries an `EDIT ME` placeholder and the dry run and `--execute` refuse to cut tags while it remains, so the release notes always get a written entry.
+`dkms.conf` on the calling repo's `main` is the one place a human bumps a version. Script derives everything else from `debian/changelog` and refuses on version drift, red CI, retag attempts or an unedited `EDIT ME` changelog entry.
 
 ## Versioning
 
-`dkms.conf` carries the version in semver form. Plain `X.Y.Z` versions pass through every layer unchanged. Semver pre-releases change spelling per layer, because Debian spells pre-release with `~` and git refs cannot carry `~` at all:
+`dkms.conf` carries the version in semver form. Plain `X.Y.Z` passes through every layer unchanged. Pre-releases change spelling per layer, because Debian spells pre-release with `~` and git refs cannot carry `~` at all:
 
 | Layer | Form | Example |
 | --- | --- | --- |
@@ -105,7 +99,7 @@ Canonical names in `scripts/` are family-suffixed (`release-<family>.sh`) so sib
 | Packaging tag | `~` becomes `_` (DEP-14) | `debian/0.2.0_beta.1-1` |
 | Release asset tarball | `~` becomes `_` (GitHub forbids `~` in asset names) | `<package>_0.2.0_beta.1-1.tar.gz` |
 
-The pre-release grammar is machine-enforced as `(alpha|beta|rc).N`, the range where dpkg and semver ordering agree. `release-dkms.sh --prepare` checks it before opening a changelog entry and the `dkms-release.yml` preflight checks it on every tag. The apt archive refuses `~` versions into its stable suites at the manifest level.
+Pre-release grammar is machine-enforced as `(alpha|beta|rc).N`, the range where dpkg and semver ordering agree. `release.sh --prepare` checks it before opening a changelog entry and the release preflight checks it on every tag. apt archive refuses `~` versions into its stable suites.
 
 ## Keys
 
