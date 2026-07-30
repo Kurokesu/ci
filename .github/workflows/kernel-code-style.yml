@@ -1,0 +1,88 @@
+name: Kernel code style
+
+# clang-format plus checkpatch for kernel camera driver repos. platform
+# input selects the checkpatch profile:
+#
+#   rpi     mainline bar, --strict. RPi drivers are plain v4l2-subdev code
+#           with a plausible upstream path
+#   jetson  NVIDIA tegracam bar. These modules build against nvidia-oot,
+#           so NVIDIA's reference drivers set the standard.
+#           Drops --strict (CHECK-level pedantry NVIDIA ignores
+#           wholesale) and ignores TRACING_LOGGING (dev_dbg(__func__) entry
+#           tracing, a deliberate tegracam idiom).
+#
+# clang-format is identical on both platforms and reads the caller repo's
+# .clang-format from its checkout.
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        description: Checkpatch profile, rpi or jetson
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  clang-format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout driver source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run clang-format style check
+        uses: jidicula/clang-format-action@6cd220de46c89139a0365edae93eee8eb30ca8fe # v4.16.0
+        with:
+          clang-format-version: '19'
+
+  checkpatch:
+    name: checkpatch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout driver source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Checkout mainline kernel scripts
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: torvalds/linux
+          ref: master
+          sparse-checkout: |
+            scripts/checkpatch.pl
+            scripts/spelling.txt
+            scripts/const_structs.checkpatch
+          sparse-checkout-cone-mode: false
+          path: linux
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install codespell
+        run: sudo apt-get install -y codespell
+
+      - name: Select checkpatch profile
+        env:
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          case "$PLATFORM" in
+          rpi)    echo "PROFILE_FLAGS=--strict" >> "$GITHUB_ENV" ;;
+          jetson) echo "PROFILE_FLAGS=--ignore TRACING_LOGGING" >> "$GITHUB_ENV" ;;
+          *)      echo "unknown platform: $PLATFORM" >&2; exit 1 ;;
+          esac
+
+      - name: Run checkpatch
+        run: |
+          linux/scripts/checkpatch.pl \
+            --no-tree -f \
+            --terse --show-types --color=never \
+            --max-line-length=100 \
+            --codespell \
+            $PROFILE_FLAGS \
+            *.c | tee /tmp/checkpatch.out
+          test ! -s /tmp/checkpatch.out
