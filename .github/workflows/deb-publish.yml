@@ -1,4 +1,4 @@
-name: Publish GitHub Release
+name: Publish GitHub release
 
 # Creates a pre-release on the caller's repo carrying the signed
 # release-assets artifact. A re-run on an existing release refreshes
@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   publish:
-    name: GitHub release
+    name: github-release
     runs-on: ubuntu-latest
     permissions:
       contents: write

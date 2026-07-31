@@ -15,7 +15,7 @@ extract() {
 	"$1" - "$WORKFLOW" "$GUARD" <<'PY'
 import sys, yaml
 workflow, out = sys.argv[1], sys.argv[2]
-steps = yaml.safe_load(open(workflow))["jobs"]["packaged-content"]["steps"]
+steps = yaml.safe_load(open(workflow))["jobs"]["package-version"]["steps"]
 scripts = [s["run"] for s in steps if "run" in s]
 assert len(scripts) == 1, f"expected one run step, found {len(scripts)}"
 open(out, "w", newline="\n").write(scripts[0])
