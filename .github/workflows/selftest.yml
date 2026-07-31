@@ -4,6 +4,9 @@ name: Selftest
 # selftest/* branches and asserts the artifact sets: a plain version on
 # selftest/upstream + selftest/recipe, a semver pre-release on the
 # selftest/*-pre pair. Sign and publish have no selftest.
+#
+# Also replays dkms-version-guard.yml over scratch repo fixtures, see
+# tests/version-guard-cases.sh.
 
 on:
   push:
@@ -34,6 +37,17 @@ jobs:
     with:
       recipe-ref: selftest/recipe-pre
       upstream-ref: selftest/upstream-pre
+
+  version-guard:
+    name: Version guard cases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Replay guard cases
+        run: bash tests/version-guard-cases.sh
 
   assert:
     needs: build
