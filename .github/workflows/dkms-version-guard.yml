@@ -1,0 +1,90 @@
+name: Version guard
+
+# Fails a PR that changes packaged content (what setup.sh copies into
+# /usr/src/<pkg>-<version>) without moving PACKAGE_VERSION in dkms.conf.
+# A pre-release version suspends the bump for its series.
+#
+# Pull request only. Push has no base to diff against.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  packaged-content:
+    name: PACKAGE_VERSION
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout driver source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check PACKAGE_VERSION against packaged changes
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+
+          # Fork point, resolved live. A base frozen at PR open can inherit a
+          # bump main made since and credit it to this PR.
+          BASE=$(git merge-base "origin/$BASE_REF" HEAD)
+
+          # Superset of both platforms' setup.sh cp lists. RPi skips *.h and
+          # scripts/, absent paths simply never match.
+          changed=$(git diff --name-only "$BASE" HEAD -- \
+            dkms.conf dkms.postinst Makefile '*.c' '*.h' '*.dts' scripts)
+
+          if [ -z "$changed" ]; then
+            echo "No packaged content changed, PACKAGE_VERSION may stay put."
+            exit 0
+          fi
+
+          echo "Packaged content changed:"
+          echo "$changed" | sed 's/^/  /'
+
+          version_of() { grep '^PACKAGE_VERSION=' | cut -d'"' -f2 | tr -d '\r'; }
+          head_version=$(version_of < dkms.conf)
+          # Empty when the PR is the one introducing dkms.conf, nothing to bump from.
+          base_version=$(git show "$BASE:dkms.conf" 2> /dev/null | version_of)
+          echo "PACKAGE_VERSION: $base_version -> $head_version"
+
+          # Warn, do not fail, on pre-release spelling the release pipeline
+          # would later reject. Grammar is enforced for real at release time.
+          case "$head_version" in
+          *-*)
+            case "${head_version#*-}" in
+            alpha.[0-9]* | beta.[0-9]* | rc.[0-9]*) ;;
+            *) echo "::warning::pre-release $head_version is not (alpha|beta|rc).N, release.sh will reject it" ;;
+            esac
+            ;;
+          esac
+
+          if [ "$head_version" = "$base_version" ]; then
+            case "$head_version" in
+            *-*)
+              echo "::notice::$head_version is a pre-release, bump suspended for the series"
+              exit 0
+              ;;
+            esac
+            echo "::error::packaged content changed but PACKAGE_VERSION is still $head_version"
+            echo "Bump patch for a fix, minor for new capability (mode, control, link rate)."
+            echo "Mid-surgery across several PRs, set a pre-release such as 0.2.0-alpha.1 instead."
+            exit 1
+          fi
+
+          # Compare release cores only. sort -V has no semver pre-release rule,
+          # and equal cores are legitimate churn (alpha.1 -> alpha.2, or a
+          # promotion to plain), so there is nothing to order.
+          head_core=${head_version%%-*}
+          base_core=${base_version%%-*}
+          if [ "$head_core" != "$base_core" ] &&
+             [ "$(printf '%s\n%s\n' "$base_core" "$head_core" | sort -V | tail -1)" != "$head_core" ]; then
+            echo "::error::PACKAGE_VERSION went backwards, $base_version to $head_version"
+            exit 1
+          fi
+
+          echo "PACKAGE_VERSION moved with the packaged content."
