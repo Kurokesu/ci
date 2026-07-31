@@ -9,12 +9,13 @@ Shared CI for Kurokesu repos: reusable GitHub Actions workflows, canonical relea
 | Workflow | Purpose | Called from |
 | --- | --- | --- |
 | `kernel-code-style.yml` | clang-format plus kernel checkpatch, profile per `platform` input | driver repo `main` shim |
+| `dkms-version-guard.yml` | fail a PR that changes packaged content without moving `PACKAGE_VERSION` | driver repo `main` shim |
 | `dkms-build.yml` | DKMS source package plus arch:all `.deb` in a clean container, callers pass nothing repo-specific | packaging branch `ci.yml` shim |
 | `dkms-release.yml` | release pipeline on `debian/*` tag push: verify tags, build, sign, publish | packaging branch `release.yml` shim |
 | `deb-sign.yml` | bundle artifacts, sign `SHA256SUMS` with archive key, self-verify | `dkms-release.yml` |
 | `deb-publish.yml` | GitHub pre-release from `release-assets` artifact, re-run refreshes assets | `dkms-release.yml` |
 
-`selftest.yml` is this repo's own CI. It runs `dkms-build.yml` against dummy DKMS fixtures on `selftest/*` orphan branches, one plain-version pair and one semver pre-release pair. Sign and publish have no selftest.
+`selftest.yml` is this repo's own CI. It runs `dkms-build.yml` against dummy DKMS fixtures on `selftest/*` orphan branches, one plain-version pair and one semver pre-release pair. It also replays `dkms-version-guard.yml` over scratch repo fixtures (`tests/version-guard-cases.sh`). Sign and publish have no selftest.
 
 ## Kernel code style
 
@@ -32,10 +33,34 @@ on:
 permissions:
   contents: read
 jobs:
-  code-style:
+  rpi:
     uses: Kurokesu/ci/.github/workflows/kernel-code-style.yml@main
     with:
       platform: rpi
+```
+
+## Version guard
+
+`PACKAGE_VERSION` in `dkms.conf` names the DKMS artifact, what lands in `/usr/src/<package>-<version>` and what users quote from `dkms status` in bug reports. Two installs claiming one version must be bit-identical there. Guard enforces that on pull requests by diffing packaged paths against the base:
+
+- packaged, bump required: `dkms.conf`, `dkms.postinst`, `Makefile`, `*.c`, `*.h`, `*.dts`, `scripts/`, matching what `setup.sh` copies
+- repo-only, no bump: `setup.sh`, `README`, `docs/`, lint configs, workflows. Git history already answers which installer someone ran
+
+Patch for a fix, minor for new capability such as a sensor mode, control or link-rate raise. Guard also rejects a version core moving backwards.
+
+Early or multi-PR work escapes the per-PR bump with a pre-release. Set `0.2.0-alpha.1` on the first PR and the demand suspends for the whole series, however many PRs it takes, then promote to plain `0.2.0` on the last one. Keeps churn off the version while `main` stays installable. Spelling rules are in [versioning](#versioning).
+
+Caller shim, `version-guard.yml` on `main`:
+
+```yaml
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  dkms:
+    uses: Kurokesu/ci/.github/workflows/dkms-version-guard.yml@main
 ```
 
 ## DKMS release family
