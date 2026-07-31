@@ -17,7 +17,6 @@ permissions:
 
 jobs:
   preflight:
-    name: Verify paired source tag
     runs-on: ubuntu-latest
     outputs:
       packaging-version: ${{ steps.parse.outputs.packaging }}

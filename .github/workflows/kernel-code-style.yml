@@ -27,7 +27,6 @@ permissions:
 
 jobs:
   clang-format:
-    name: clang-format
     runs-on: ubuntu-latest
     steps:
       - name: Checkout driver source
@@ -41,7 +40,6 @@ jobs:
           clang-format-version: '19'
 
   checkpatch:
-    name: checkpatch
     runs-on: ubuntu-latest
     steps:
       - name: Checkout driver source
