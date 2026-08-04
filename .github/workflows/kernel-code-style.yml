@@ -82,5 +82,5 @@ jobs:
             --max-line-length=100 \
             --codespell \
             $PROFILE_FLAGS \
-            *.c | tee /tmp/checkpatch.out
+            *.c *.h | tee /tmp/checkpatch.out
           test ! -s /tmp/checkpatch.out
