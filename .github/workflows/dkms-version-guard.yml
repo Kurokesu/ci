@@ -1,7 +1,7 @@
 name: Version guard
 
-# Fails a PR that changes packaged content (what setup.sh copies into
-# /usr/src/<pkg>-<version>) without moving PACKAGE_VERSION in dkms.conf.
+# Fails a PR that changes packaged content (DKMS source plus any ISP
+# tuning an install delivers) without moving PACKAGE_VERSION in dkms.conf.
 # A pre-release version suspends the bump for its series.
 #
 # Pull request only. Push has no base to diff against.
@@ -32,10 +32,11 @@ jobs:
           # bump main made since and credit it to this PR.
           BASE=$(git merge-base "origin/$BASE_REF" HEAD)
 
-          # Superset of both platforms' setup.sh cp lists. RPi skips *.h and
-          # scripts/, absent paths simply never match.
+          # Superset of both platforms' setup.sh installs. RPi skips *.h,
+          # scripts/ and tuning/, absent paths simply never match. Tuning goes
+          # straight to /var/nvidia/nvcam/settings.
           changed=$(git diff --name-only "$BASE" HEAD -- \
-            dkms.conf dkms.postinst Makefile '*.c' '*.h' '*.dts' scripts)
+            dkms.conf dkms.postinst Makefile '*.c' '*.h' '*.dts' scripts tuning)
 
           if [ -z "$changed" ]; then
             echo "No packaged content changed, PACKAGE_VERSION may stay put."

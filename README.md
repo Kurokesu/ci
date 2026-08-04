@@ -43,7 +43,7 @@ jobs:
 
 `PACKAGE_VERSION` in `dkms.conf` names the DKMS artifact, what lands in `/usr/src/<package>-<version>` and what users quote from `dkms status` in bug reports. Two installs claiming one version must be bit-identical there. Guard enforces that on pull requests by diffing packaged paths against the base:
 
-- packaged, bump required: `dkms.conf`, `dkms.postinst`, `Makefile`, `*.c`, `*.h`, `*.dts`, `scripts/`, matching what `setup.sh` copies
+- packaged, bump required: `dkms.conf`, `dkms.postinst`, `Makefile`, `*.c`, `*.h`, `*.dts`, `scripts/`, `tuning/`, matching what an install delivers. Jetson ISP tuning counts even though it goes to `/var/nvidia/nvcam/settings` rather than through `/usr/src`
 - repo-only, no bump: `setup.sh`, `README`, `docs/`, lint configs, workflows. Git history already answers which installer someone ran
 
 Patch for a fix, minor for new capability such as a sensor mode, control or link-rate raise. Guard also rejects a version core moving backwards.
