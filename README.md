@@ -44,7 +44,7 @@ jobs:
 
 Cross-compiles arm64 against `raspberrypi/linux` with `bcm2712_defconfig`, one job per kernel branch. `make obj dtbo` builds module and overlay together. `rpi-6.12.y` is the gate, `latest` runs `continue-on-error` as an early warning.
 
-Caller shim, `build-rpi.yml` on `main`:
+Caller shim, `build.yml` on `main`:
 
 ```yaml
 on:
