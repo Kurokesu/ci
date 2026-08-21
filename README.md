@@ -9,6 +9,7 @@ Shared CI for Kurokesu repos: reusable GitHub Actions workflows, canonical relea
 | Workflow | Purpose | Called from |
 | --- | --- | --- |
 | `kernel-code-style.yml` | clang-format plus kernel checkpatch, profile per `platform` input | driver repo `main` shim |
+| `rpi-kmod-build.yml` | cross-compile an RPi driver module and its overlay against `raspberrypi/linux` | driver repo `main` shim |
 | `dkms-version-guard.yml` | fail a PR that changes packaged content without moving `PACKAGE_VERSION` | driver repo `main` shim |
 | `dkms-build.yml` | DKMS source package plus arch:all `.deb` in a clean container, callers pass nothing repo-specific | packaging branch `ci.yml` shim |
 | `dkms-release.yml` | release pipeline on `debian/*` tag push: verify tags, build, sign, publish | packaging branch `release.yml` shim |
@@ -37,6 +38,26 @@ jobs:
     uses: Kurokesu/ci/.github/workflows/kernel-code-style.yml@main
     with:
       platform: rpi
+```
+
+## RPi kmod build
+
+Cross-compiles arm64 against `raspberrypi/linux` with `bcm2712_defconfig`, one job per kernel branch. `make obj dtbo` builds module and overlay together. `rpi-6.12.y` is the gate, `latest` runs `continue-on-error` as an early warning.
+
+Caller shim, `build-rpi.yml` on `main`:
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  kmod:
+    uses: Kurokesu/ci/.github/workflows/rpi-kmod-build.yml@main
 ```
 
 ## Version guard
