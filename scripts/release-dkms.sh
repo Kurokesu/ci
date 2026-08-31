@@ -14,6 +14,7 @@ set -eu
 REMOTE=origin
 SRC_BRANCH=main
 PKG_BRANCH=debian/latest
+CI_WORKFLOW=ci.yml
 
 print() { printf '  %-9s %s\n' "$1" "$2"; }
 die() { printf '%s\n' "$@" >&2; exit 1; }
@@ -159,18 +160,26 @@ print PACKAGING "${PKG_TAG} -> ${PKG_SHA} (${REMOTE}/${PKG_BRANCH})"
 # Block unless the packaging tip is CI-green. An unreachable API blocks
 # too, fail closed
 BRANCH_ENC=$(printf %s "$PKG_BRANCH" | sed 's#/#%2F#g')
-CI=$(curl -sf --max-time 10 \
-	"https://api.github.com/repos/${REPO}/actions/runs?branch=${BRANCH_ENC}&per_page=1" \
-	2>/dev/null \
-	| python3 -c 'import json,sys
+RUNS=$(curl -sf --max-time 10 \
+	"https://api.github.com/repos/${REPO}/actions/workflows/${CI_WORKFLOW}/runs?branch=${BRANCH_ENC}&per_page=1") \
+	|| die "ERROR: cannot reach GitHub API for ${REPO} run status."
+CI=$(printf '%s\n' "$RUNS" | python3 -c 'import json,sys
 r = json.load(sys.stdin)["workflow_runs"]
 print(((r[0]["conclusion"] or "in_progress") + " " + r[0]["head_sha"]) if r else "none -")' \
-	2>/dev/null) || CI="unknown -"
+	2>/dev/null) || die "ERROR: unexpected run list from GitHub API."
 CONCLUSION=${CI% *}
 CI_SHA=${CI#* }
-[ "$CONCLUSION" = "success" ] \
-	|| die "ERROR: latest CI on ${PKG_BRANCH} is '${CONCLUSION}', not 'success'." \
-		"       Wait for a green run on packaging tip."
+case "$CONCLUSION" in
+	success) ;;
+	none)
+		die "ERROR: no ${CI_WORKFLOW} run found for ${PKG_BRANCH}." \
+			"       Push ${PKG_BRANCH} and wait for CI."
+		;;
+	*)
+		die "ERROR: latest ${CI_WORKFLOW} run on ${PKG_BRANCH} is '${CONCLUSION}', not 'success'." \
+			"       Wait for a green run on packaging tip."
+		;;
+esac
 # A green run for some other commit is stale, not proof for this tip
 [ "$CI_SHA" = "$PKG_SHA" ] \
 	|| die "ERROR: green run covers ${CI_SHA}," \
