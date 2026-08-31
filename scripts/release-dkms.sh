@@ -16,6 +16,15 @@ SRC_BRANCH=main
 PKG_BRANCH=debian/latest
 
 print() { printf '  %-9s %s\n' "$1" "$2"; }
+die() { printf '%s\n' "$@" >&2; exit 1; }
+dkms_ver() { git show "$1:dkms.conf" | sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p'; }
+
+# dkms.conf carries semver (0.2.0-beta.1). Debian swaps pre-release
+# hyphen for '~', which dpkg orders before release. Git refs cannot
+# carry '~', so packaging tag uses '_' (DEP-14)
+to_deb()    { printf '%s\n' "$1" | sed 's/-/~/g'; }
+to_semver() { printf '%s\n' "$1" | sed 's/~/-/g'; }
+to_ref()    { printf '%s\n' "$1" | sed 's/~/_/g'; }
 
 # Tagging and pushing require an explicit --execute
 MODE=dry-run
@@ -26,35 +35,19 @@ case "${1:-}" in
 	*) echo "usage: ./release.sh [--prepare | --execute]   (no args = dry run)" >&2; exit 2 ;;
 esac
 
-# dkms.conf carries semver (0.2.0-beta.1). Debian swaps pre-release
-# hyphen for '~', which dpkg orders before release. Git refs cannot
-# carry '~', so packaging tag uses '_' (DEP-14)
-to_deb()    { printf '%s\n' "$1" | sed 's/-/~/g'; }
-to_semver() { printf '%s\n' "$1" | sed 's/~/-/g'; }
-to_ref()    { printf '%s\n' "$1" | sed 's/~/_/g'; }
-
 if [ "$MODE" = prepare ]; then
-	[ -f debian/changelog ] || {
-		echo "ERROR: no debian/changelog here. Run from packaging worktree." >&2
-		exit 1
-	}
+	[ -f debian/changelog ] \
+		|| die "ERROR: no debian/changelog here. Run from packaging worktree."
 	git fetch --tags --quiet "$REMOTE" "$SRC_BRANCH" "$PKG_BRANCH"
 	# dch edits this checkout, so refuse a base origin moved past
-	git merge-base --is-ancestor "${REMOTE}/${PKG_BRANCH}" HEAD || {
-		echo "ERROR: checkout is behind ${REMOTE}/${PKG_BRANCH}. Pull first." >&2
-		exit 1
-	}
-	DKMS_VER=$(git show "${REMOTE}/${SRC_BRANCH}:dkms.conf" \
-		| sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p')
-	[ -n "$DKMS_VER" ] || {
-		echo "ERROR: no PACKAGE_VERSION in dkms.conf on ${REMOTE}/${SRC_BRANCH}." >&2
-		exit 1
-	}
+	git merge-base --is-ancestor "${REMOTE}/${PKG_BRANCH}" HEAD \
+		|| die "ERROR: checkout is behind ${REMOTE}/${PKG_BRANCH}. Pull first."
+	DKMS_VER=$(dkms_ver "${REMOTE}/${SRC_BRANCH}")
+	[ -n "$DKMS_VER" ] \
+		|| die "ERROR: no PACKAGE_VERSION in dkms.conf on ${REMOTE}/${SRC_BRANCH}."
 	# Only grammar where dpkg and semver ordering agree
-	printf '%s' "$DKMS_VER" | grep -Eq '^[0-9]+(\.[0-9]+)*(-(alpha|beta|rc)\.[0-9]+)?$' || {
-		echo "ERROR: dkms.conf version '${DKMS_VER}' is not X.Y.Z or X.Y.Z-(alpha|beta|rc).N." >&2
-		exit 1
-	}
+	printf '%s' "$DKMS_VER" | grep -Eq '^[0-9]+(\.[0-9]+)*(-(alpha|beta|rc)\.[0-9]+)?$' \
+		|| die "ERROR: dkms.conf version '${DKMS_VER}' is not X.Y.Z or X.Y.Z-(alpha|beta|rc).N."
 	DKMS_VER=$(to_deb "$DKMS_VER")
 	CUR=$(dpkg-parsechangelog -SVersion)
 	TAG_VER=${CUR#*:}
@@ -66,9 +59,8 @@ if [ "$MODE" = prepare ]; then
 			echo "Edit it, commit, push, then run ./release.sh."
 			exit 0
 		fi
-		echo "ERROR: top entry ${CUR} is unreleased, but dkms.conf on ${SRC_BRANCH} says ${DKMS_VER}." >&2
-		echo "       Release ${CUR} first, or fix mismatch by hand." >&2
-		exit 1
+		die "ERROR: top entry ${CUR} is unreleased, but dkms.conf on ${SRC_BRANCH} says ${DKMS_VER}." \
+			"       Release ${CUR} first, or fix mismatch by hand."
 	fi
 	# Same upstream means a packaging-only rebuild, so bump the revision.
 	# EDIT ME blocks release until a real entry replaces it
@@ -79,18 +71,14 @@ if [ "$MODE" = prepare ]; then
 		NEW="${DKMS_VER}-1"
 		MSG="New upstream release. EDIT ME: describe the changes."
 	fi
-	dpkg --compare-versions "$NEW" gt "$CUR" || {
-		echo "ERROR: computed ${NEW} does not advance ${CUR}." >&2
-		echo "       Bump dkms.conf on ${SRC_BRANCH} first." >&2
-		exit 1
-	}
+	dpkg --compare-versions "$NEW" gt "$CUR" \
+		|| die "ERROR: computed ${NEW} does not advance ${CUR}." \
+			"       Bump dkms.conf on ${SRC_BRANCH} first."
 	# dch takes attribution from DEBEMAIL, a "Name <email>" value fills
 	# both fields
-	[ -n "${DEBEMAIL:-}" ] || {
-		echo "ERROR: DEBEMAIL is unset, changelog entry needs an author." >&2
-		echo "       export DEBEMAIL='Your Name <you@kurokesu.com>' and rerun." >&2
-		exit 1
-	}
+	[ -n "${DEBEMAIL:-}" ] \
+		|| die "ERROR: DEBEMAIL is unset, changelog entry needs an author." \
+			"       export DEBEMAIL='Your Name <you@kurokesu.com>' and rerun."
 	export DEBEMAIL
 	dch --newversion "$NEW" --distribution unstable \
 		--force-distribution "$MSG"
@@ -112,16 +100,14 @@ TAG_VER=${FULL#*:}
 UPSTREAM=${TAG_VER%-*}
 # Same grammar --prepare enforces, in changelog form. Catches a
 # hand-edited entry
-printf '%s' "$UPSTREAM" | grep -Eq '^[0-9]+(\.[0-9]+)*(~(alpha|beta|rc)\.[0-9]+)?$' || {
-	echo "ERROR: changelog version '${UPSTREAM}' is not X.Y.Z or X.Y.Z~(alpha|beta|rc).N." >&2
-	exit 1
-}
+printf '%s' "$UPSTREAM" | grep -Eq '^[0-9]+(\.[0-9]+)*(~(alpha|beta|rc)\.[0-9]+)?$' \
+	|| die "ERROR: changelog version '${UPSTREAM}' is not X.Y.Z or X.Y.Z~(alpha|beta|rc).N."
 # Top entry seeds the release notes, so no placeholder may reach them
 if printf '%s\n' "$CHANGELOG" | sed -n '2,/^ -- /p' | grep -q 'EDIT ME'; then
-	echo "ERROR: top changelog entry still carries EDIT ME placeholder." >&2
-	echo "       Describe release, commit, push, then rerun ./release.sh." >&2
-	exit 1
+	die "ERROR: top changelog entry still carries EDIT ME placeholder." \
+		"       Describe release, commit, push, then rerun ./release.sh."
 fi
+
 SRC_TAG="v$(to_semver "$UPSTREAM")"
 PKG_TAG="debian/$(to_ref "$TAG_VER")"
 PKG_SHA=$(git rev-parse "${REMOTE}/${PKG_BRANCH}")
@@ -137,24 +123,18 @@ else
 fi
 
 # Catch version drift before any tags exist
-DKMS_VER=$(git show "${SRC_SHA}:dkms.conf" \
-	| sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p')
-DKMS_VER=$(to_deb "$DKMS_VER")
-if [ "$DKMS_VER" != "$UPSTREAM" ]; then
-	echo "ERROR: dkms.conf at ${SRC_SHA} maps to '${DKMS_VER}'," >&2
-	echo "       but debian/changelog says '${UPSTREAM}'." >&2
-	echo "       Bump dkms.conf on ${SRC_BRANCH} to match." >&2
-	exit 1
-fi
+DKMS_VER=$(to_deb "$(dkms_ver "$SRC_SHA")")
+[ "$DKMS_VER" = "$UPSTREAM" ] \
+	|| die "ERROR: dkms.conf at ${SRC_SHA} maps to '${DKMS_VER}'," \
+		"       but debian/changelog says '${UPSTREAM}'." \
+		"       Bump dkms.conf on ${SRC_BRANCH} to match."
 
 # Refuse a version already tagged at another commit
 if EXISTING=$(git rev-parse -q --verify "refs/tags/${PKG_TAG}^{commit}"); then
-	if [ "$EXISTING" != "$PKG_SHA" ]; then
-		echo "ERROR: ${PKG_TAG} exists at ${EXISTING}," >&2
-		echo "       but ${REMOTE}/${PKG_BRANCH} is at ${PKG_SHA}." >&2
-		echo "       Bump changelog revision for a new release." >&2
-		exit 1
-	fi
+	[ "$EXISTING" = "$PKG_SHA" ] \
+		|| die "ERROR: ${PKG_TAG} exists at ${EXISTING}," \
+			"       but ${REMOTE}/${PKG_BRANCH} is at ${PKG_SHA}." \
+			"       Bump changelog revision for a new release."
 fi
 
 REPO=$(git remote get-url "$REMOTE" \
@@ -176,17 +156,13 @@ print(((r[0]["conclusion"] or "in_progress") + " " + r[0]["head_sha"]) if r else
 	2>/dev/null) || CI="unknown -"
 CONCLUSION=${CI% *}
 CI_SHA=${CI#* }
-if [ "$CONCLUSION" != "success" ]; then
-	echo "ERROR: latest CI on ${PKG_BRANCH} is '${CONCLUSION}', not 'success'." >&2
-	echo "       Wait for a green run on packaging tip." >&2
-	exit 1
-fi
+[ "$CONCLUSION" = "success" ] \
+	|| die "ERROR: latest CI on ${PKG_BRANCH} is '${CONCLUSION}', not 'success'." \
+		"       Wait for a green run on packaging tip."
 # A green run for some other commit is stale, not proof for this tip
-if [ "$CI_SHA" != "$PKG_SHA" ]; then
-	echo "ERROR: green run covers ${CI_SHA}," >&2
-	echo "       not packaging tip ${PKG_SHA}. Wait for a run on it." >&2
-	exit 1
-fi
+[ "$CI_SHA" = "$PKG_SHA" ] \
+	|| die "ERROR: green run covers ${CI_SHA}," \
+		"       not packaging tip ${PKG_SHA}. Wait for a run on it."
 
 if [ "$MODE" = dry-run ]; then
 	echo "Dry run, no tags created, nothing pushed."
