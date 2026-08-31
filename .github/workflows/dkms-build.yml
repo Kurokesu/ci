@@ -42,6 +42,9 @@ on:
       artifact:
         description: Name of the uploaded build artifact
         value: ${{ jobs.build.outputs.package }}_${{ jobs.build.outputs.packaging }}
+      source-sha:
+        description: Commit the upstream-ref resolved to
+        value: ${{ jobs.build.outputs.source-sha }}
 
 permissions:
   contents: read
@@ -53,6 +56,7 @@ jobs:
     outputs:
       package: ${{ steps.version.outputs.package }}
       packaging: ${{ steps.version.outputs.packaging }}
+      source-sha: ${{ steps.source.outputs.sha }}
     steps:
       - name: Checkout packaging recipe (debian/)
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -69,6 +73,15 @@ jobs:
           repository: ${{ inputs.source-repo || github.repository }}
           ref: ${{ inputs.upstream-ref }}
           path: upstream
+
+      # A branch ref resolves at checkout, so record what this run covers
+      - name: Resolve source commit
+        id: source
+        run: |
+          set -euo pipefail
+          SHA=$(git -C upstream rev-parse HEAD)
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "Source commit: ${SHA} (${{ inputs.upstream-ref }})"
 
       - name: Compute package name and versions from changelog
         id: version
