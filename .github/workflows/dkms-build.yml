@@ -99,14 +99,14 @@ jobs:
           echo "Packaging version: ${PACKAGING}"
           echo "Upstream version:  ${UPSTREAM}"
 
-      # Version drift is expected on PR runs, not in release builds
+      # Version drift is expected until release, so only branch builds allow it
       - name: Build source + binary package in a clean container
         id: build
         env:
           IMAGE: ${{ inputs.container-image }}
           PKG: ${{ steps.version.outputs.package }}
           UPSTREAM: ${{ steps.version.outputs.upstream }}
-          DRIFT_GUARD: ${{ github.event_name == 'pull_request' && 'warn' || 'fail' }}
+          DRIFT_GUARD: ${{ github.ref_type == 'branch' && 'warn' || 'fail' }}
         run: |
           set -euo pipefail
           docker run --rm -e PKG -e UPSTREAM -e DRIFT_GUARD \
