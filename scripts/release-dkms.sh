@@ -15,6 +15,7 @@ REMOTE=origin
 SRC_BRANCH=main
 PKG_BRANCH=debian/latest
 CI_WORKFLOW=ci.yml
+CI_CONTEXT=packaging/source-build
 
 print() { printf '  %-9s %s\n' "$1" "$2"; }
 die() { printf '%s\n' "$@" >&2; exit 1; }
@@ -184,6 +185,31 @@ esac
 [ "$CI_SHA" = "$PKG_SHA" ] \
 	|| die "ERROR: green run covers ${CI_SHA}," \
 		"       not packaging tip ${PKG_SHA}. Wait for a run on it."
+
+# That run resolved the source branch when it started, so a merge landing
+# after it leaves this tag on a commit nothing built. dkms-build.yml posts
+# CI_CONTEXT on the commit it read. A reused tag was proven at its own
+# release, so only a new one needs the status
+if [ "$CREATE_SRC" -eq 1 ]; then
+	STATUSES=$(curl -sf --max-time 10 \
+		"https://api.github.com/repos/${REPO}/commits/${SRC_SHA}/statuses") \
+		|| die "ERROR: cannot reach GitHub API for ${SRC_SHA} status."
+	STATE=$(printf '%s\n' "$STATUSES" | python3 -c 'import json,sys
+s = [x for x in json.load(sys.stdin) if x["context"] == sys.argv[1]]
+print(s[0]["state"] if s else "none")' "$CI_CONTEXT" 2>/dev/null) \
+		|| die "ERROR: unexpected status list from GitHub API."
+	case "$STATE" in
+		success) ;;
+		none)
+			die "ERROR: no ${CI_CONTEXT} status on ${SRC_SHA}." \
+				"       ${SRC_BRANCH} moved after that run. Rerun CI on ${PKG_BRANCH}" \
+				"       to build the current ${SRC_BRANCH} tip, then rerun this."
+			;;
+		*)
+			die "ERROR: ${CI_CONTEXT} status on ${SRC_SHA} is '${STATE}', not 'success'."
+			;;
+	esac
+fi
 
 if [ "$MODE" = dry-run ]; then
 	echo "Dry run, no tags created, nothing pushed."

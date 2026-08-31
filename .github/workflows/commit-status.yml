@@ -1,0 +1,57 @@
+name: Commit status
+
+# Marks a commit with a named status, so a later gate can require it.
+# Split out of dkms-build.yml because a called workflow cannot widen the
+# caller's token: asking for statuses write there would force every
+# caller to grant it or fail at startup. Callers grant it on this job
+# alone.
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: Full commit SHA to mark, the API rejects abbreviated forms
+        type: string
+        required: true
+      state:
+        description: success, failure, error or pending
+        type: string
+        required: true
+      context:
+        description: Status name a gate matches on
+        type: string
+        required: true
+      description:
+        description: Short text shown beside the status
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  statuses: write
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      # Status lands on the calling repo, the only one this token can write
+      - name: Post status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha }}
+          STATE: ${{ inputs.state }}
+          CONTEXT: ${{ inputs.context }}
+          DESCRIPTION: ${{ inputs.description }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          jq -n --arg state "$STATE" --arg context "$CONTEXT" \
+                --arg url "$RUN_URL" --arg description "$DESCRIPTION" \
+            '{state: $state, context: $context, target_url: $url,
+              description: $description}' \
+            | curl -sS --fail-with-body -X POST \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+                -d @- -o /dev/null
+          echo "Posted ${STATE} '${CONTEXT}' on ${SHA}"
