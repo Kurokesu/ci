@@ -17,6 +17,10 @@ PKG_BRANCH=debian/latest
 
 print() { printf '  %-9s %s\n' "$1" "$2"; }
 die() { printf '%s\n' "$@" >&2; exit 1; }
+need() {
+	command -v "$1" >/dev/null 2>&1 \
+		|| die "ERROR: '$1' not found. Install it:" "sudo apt install $2"
+}
 dkms_ver() { git show "$1:dkms.conf" | sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p'; }
 
 # dkms.conf carries semver (0.2.0-beta.1). Debian swaps pre-release
@@ -34,6 +38,14 @@ case "${1:-}" in
 	--dry-run|'') MODE=dry-run ;;
 	*) echo "usage: ./release.sh [--prepare | --execute]   (no args = dry run)" >&2; exit 2 ;;
 esac
+
+need dpkg-parsechangelog dpkg-dev
+if [ "$MODE" = prepare ]; then
+	need dch devscripts
+else
+	need curl curl
+	need python3 python3
+fi
 
 if [ "$MODE" = prepare ]; then
 	[ -f debian/changelog ] \
