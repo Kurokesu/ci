@@ -6,7 +6,9 @@ name: Selftest
 # selftest/*-pre pair. Sign and publish have no selftest.
 #
 # Also replays dkms-version-guard.yml over scratch repo fixtures, see
-# tests/version-guard-cases.sh.
+# tests/version-guard-cases.sh, and scripts/release-dkms.sh against a
+# scratch driver repo with curl and dch stubbed, see
+# tests/release-cases.sh
 
 on:
   push:
@@ -47,6 +49,16 @@ jobs:
 
       - name: Replay guard cases
         run: bash tests/version-guard-cases.sh
+
+  release-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Replay release cases
+        run: bash tests/release-cases.sh
 
   assert:
     needs: build
