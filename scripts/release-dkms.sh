@@ -94,8 +94,8 @@ if [ "$MODE" = prepare ]; then
 		|| die "ERROR: DEBEMAIL is unset, changelog entry needs an author." \
 			"       export DEBEMAIL='Your Name <you@kurokesu.com>' and rerun."
 	export DEBEMAIL
-	dch --newversion "$NEW" --distribution unstable \
-		--force-distribution "$MSG"
+	# Pin vendor, dch otherwise guesses it through distro-info and warns
+	dch --vendor Debian --newversion "$NEW" --distribution unstable "$MSG"
 	echo "Opened ${NEW} in debian/changelog with an EDIT ME placeholder."
 	echo "Describe release, commit, push, then rerun ./release.sh once CI is green."
 	echo "EDIT ME blocks release until replaced."

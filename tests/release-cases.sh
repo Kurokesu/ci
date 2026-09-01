@@ -234,6 +234,7 @@ export DEBEMAIL='selftest <selftest@kurokesu.com>'
 run --prepare
 check 'same upstream bumps the revision' 0 'Opened 0.2.0-2'
 check_file 'dch called with that version' "$STUB_DCH_ARGS" '--newversion 0.2.0-2'
+check_file 'dch vendor pinned to Debian' "$STUB_DCH_ARGS" '--vendor Debian'
 src_push src-030
 run --prepare
 check 'new upstream opens revision 1' 0 'Opened 0.3.0-1'
