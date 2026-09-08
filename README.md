@@ -14,7 +14,7 @@ Shared CI for Kurokesu repos: reusable GitHub Actions workflows, canonical relea
 | `dkms-build.yml` | DKMS source package plus arch:all `.deb` in a clean container, callers pass nothing repo-specific | packaging branch `ci.yml` shim |
 | `dkms-release.yml` | release pipeline on `debian/*` tag push: verify tags, build, sign, publish | packaging branch `release.yml` shim |
 | `deb-sign.yml` | bundle artifacts, sign `SHA256SUMS` with archive key, self-verify | `dkms-release.yml` |
-| `deb-publish.yml` | GitHub pre-release from `release-assets` artifact, re-run refreshes assets | `dkms-release.yml` |
+| `deb-publish.yml` | GitHub draft release from `release-assets` artifact, re-run refreshes assets | `dkms-release.yml` |
 
 `selftest.yml` is this repo's own CI. It runs `dkms-build.yml` against dummy DKMS fixtures on `selftest/*` orphan branches, one plain-version pair and one semver pre-release pair. It also replays `dkms-version-guard.yml` over scratch repo fixtures (`tests/version-guard-cases.sh`). Sign and publish have no selftest.
 
@@ -86,7 +86,7 @@ jobs:
 
 ## DKMS release family
 
-`dkms-build.yml` and `dkms-release.yml` assume DEP-14 layout in the calling repo: driver source on `main` tagged `v<upstream>`, packaging recipe on `debian/latest` tagged `debian/<upstream>-<revision>`. Package name and build dependencies come from the recipe. Release verifies paired tags against `debian/changelog`, then builds, signs and publishes a GitHub pre-release. Signing needs the org-level `ARCHIVE_GPG_SIGNING_KEY` secret, passed with `secrets: inherit`.
+`dkms-build.yml` and `dkms-release.yml` assume DEP-14 layout in the calling repo: driver source on `main` tagged `v<upstream>`, packaging recipe on `debian/latest` tagged `debian/<upstream>-<revision>`. Package name and build dependencies come from the recipe. Release verifies paired tags against `debian/changelog`, then builds, signs and creates a GitHub draft release, so skeleton notes cannot notify watchers before they are filled in. Signing needs the org-level `ARCHIVE_GPG_SIGNING_KEY` secret, passed with `secrets: inherit`.
 
 `release.yml` on the packaging branch:
 

@@ -52,10 +52,12 @@ jobs:
             exit 0
           fi
 
-          # Notes seed from the input and get edited by hand before
-          # promoting from Pre-release to Latest.
+          # Draft so the seeded notes cannot notify watchers. They get
+          # edited by hand, published as Pre-release, then promoted to
+          # Latest once validated.
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
+            --draft \
             --prerelease \
             --notes "$NOTES" \
             release-assets/*
