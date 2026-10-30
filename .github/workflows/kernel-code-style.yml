@@ -12,7 +12,8 @@ name: Kernel code style
 #           tracing, a deliberate tegracam idiom).
 #
 # clang-format is identical on both platforms and reads the caller repo's
-# .clang-format from its checkout.
+# .clang-format from its checkout. Drivers carrying unformatted upstream code
+# turn it off with clang-format: false.
 
 on:
   workflow_call:
@@ -21,12 +22,17 @@ on:
         description: Checkpatch profile, rpi or jetson
         type: string
         required: true
+      clang-format:
+        description: Run clang-format check
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
 jobs:
   clang-format:
+    if: inputs.clang-format
     runs-on: ubuntu-latest
     steps:
       - name: Checkout driver source
