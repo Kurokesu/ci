@@ -20,7 +20,7 @@ Shared CI for Kurokesu repos: reusable GitHub Actions workflows, canonical relea
 
 ## Kernel code style
 
-Two jobs: clang-format against caller's `.clang-format` and mainline `checkpatch.pl` with zero findings tolerated. checkpatch enforces Linux kernel coding style, hence the `kernel-` prefix, userspace projects should not call this. `platform` input picks the checkpatch profile. `rpi` runs `--strict`, these drivers hold the mainline bar. `jetson` drops `--strict` and ignores `TRACING_LOGGING`, NVIDIA's tegracam reference is the standard for modules that build against nvidia-oot and cannot go upstream. Full rationale in the workflow header.
+Two jobs: clang-format against caller's `.clang-format` and mainline `checkpatch.pl` with zero findings tolerated. checkpatch enforces Linux kernel coding style, hence the `kernel-` prefix, userspace projects should not call this. `platform` input picks the checkpatch profile. `rpi` runs `--strict`, these drivers hold the mainline bar. `jetson` drops `--strict` and ignores `TRACING_LOGGING`, NVIDIA's tegracam reference is the standard for modules that build against nvidia-oot and cannot go upstream. `clang-format: false` skips clang-format for drivers carrying unformatted upstream code. Full rationale in the workflow header.
 
 Caller shim, `code-style.yml` on `main`:
 
