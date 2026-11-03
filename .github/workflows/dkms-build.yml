@@ -52,7 +52,7 @@ permissions:
 jobs:
   build:
     name: source-package
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       package: ${{ steps.version.outputs.package }}
       packaging: ${{ steps.version.outputs.packaging }}
