@@ -45,13 +45,14 @@ git config user.email selftest@kurokesu.com
 git config user.name selftest
 # Fixtures are byte-exact on purpose, one case turns dkms.conf CRLF.
 git config core.autocrlf false
-mkdir -p scripts
+mkdir -p scripts udev
 dkms_conf 0.1.0 > dkms.conf
 echo 'int probe(void) { return 0; }' > nv_imx585.c
 echo 'sensor {};' > imx585.dts
 echo 'obj-m += nv_imx585.o' > Makefile
 echo 'depmod -a' > dkms.postinst
 echo 'exit 0' > scripts/conftest.sh
+echo '# rtcpu' > udev/99-camera-rtcpu.rules
 echo '# imx585' > README.md
 echo 'set -e' > install.sh
 echo 'set -e' > uninstall.sh
@@ -94,6 +95,7 @@ case_run 'dts changed, no bump'            err 'echo "// x" >> imx585.dts'
 case_run 'makefile changed, no bump'       err 'echo "# x" >> Makefile'
 case_run 'postinst changed, no bump'       err 'echo "# x" >> dkms.postinst'
 case_run 'scripts changed, no bump'        err 'echo "# x" >> scripts/conftest.sh'
+case_run 'udev rule changed, no bump'      err 'echo "# x" >> udev/99-camera-rtcpu.rules'
 case_run 'header added, no bump'           err 'echo "#define X 1" > mode_tbls.h'
 case_run 'packaged file deleted, no bump'  err 'rm imx585.dts'
 
