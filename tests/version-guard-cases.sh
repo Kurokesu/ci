@@ -53,7 +53,9 @@ echo 'obj-m += nv_imx585.o' > Makefile
 echo 'depmod -a' > dkms.postinst
 echo 'exit 0' > scripts/conftest.sh
 echo '# imx585' > README.md
-echo 'set -e' > setup.sh
+echo 'set -e' > install.sh
+echo 'set -e' > uninstall.sh
+echo 'exec sh install.sh' > setup.sh
 git add -A
 git commit -qm 'Fixture base'
 BASE=$(git rev-parse HEAD)
@@ -84,6 +86,8 @@ case_run() {
 
 echo '== packaged versus repo-only =='
 case_run 'readme only, no bump'            ok  'echo more >> README.md'
+case_run 'install.sh only, no bump'        ok  'echo more >> install.sh'
+case_run 'uninstall.sh only, no bump'      ok  'echo more >> uninstall.sh'
 case_run 'setup.sh only, no bump'          ok  'echo more >> setup.sh'
 case_run 'source changed, no bump'         err 'echo "// fix" >> nv_imx585.c'
 case_run 'dts changed, no bump'            err 'echo "// x" >> imx585.dts'

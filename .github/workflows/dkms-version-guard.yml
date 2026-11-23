@@ -32,7 +32,7 @@ jobs:
           # bump main made since and credit it to this PR.
           BASE=$(git merge-base "origin/$BASE_REF" HEAD)
 
-          # Superset of both platforms' setup.sh installs. RPi skips *.h,
+          # Superset of both platforms' install.sh delivers. RPi skips *.h,
           # scripts/ and tuning/, absent paths simply never match. Tuning goes
           # straight to /var/nvidia/nvcam/settings.
           changed=$(git diff --name-only "$BASE" HEAD -- \
