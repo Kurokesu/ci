@@ -34,7 +34,7 @@ jobs:
 
           # Every path an install delivers, absent ones never match
           changed=$(git diff --name-only "$BASE" HEAD -- \
-            dkms.conf dkms.postinst Makefile '*.c' '*.h' '*.dts' scripts tuning)
+            dkms.conf dkms.postinst Makefile '*.c' '*.h' '*.dts' scripts tuning udev)
 
           if [ -z "$changed" ]; then
             echo "No packaged content changed, PACKAGE_VERSION may stay put."
