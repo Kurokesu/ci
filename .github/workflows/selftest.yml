@@ -64,6 +64,8 @@ jobs:
 
   docs:
     uses: ./.github/workflows/markdown-lint.yml
+    with:
+      config-ref: ${{ github.sha }}
 
   assert:
     needs: build

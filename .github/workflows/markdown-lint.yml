@@ -5,6 +5,11 @@ name: Markdown lint
 
 on:
   workflow_call:
+    inputs:
+      config-ref:
+        description: Kurokesu/ci ref to read .markdownlint.jsonc from
+        type: string
+        default: main
 
 permissions:
   contents: read
@@ -22,7 +27,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: Kurokesu/ci
-          ref: main
+          ref: ${{ inputs.config-ref }}
           sparse-checkout: .markdownlint.jsonc
           sparse-checkout-cone-mode: false
           path: ci
