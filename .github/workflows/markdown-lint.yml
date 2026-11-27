@@ -1,0 +1,36 @@
+name: Markdown lint
+
+# markdownlint over every Markdown file of the caller. Rules come from
+# Kurokesu/ci .markdownlint.jsonc, shared by all callers.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  markdown:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Checkout shared config
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: Kurokesu/ci
+          ref: main
+          sparse-checkout: .markdownlint.jsonc
+          sparse-checkout-cone-mode: false
+          path: ci
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@3ce8f712b5d8f31acd8e201be6d97e3d2bb23eb7 # v25.1.0
+        with:
+          config: ci/.markdownlint.jsonc
+          globs: '**/*.{md,markdown}'

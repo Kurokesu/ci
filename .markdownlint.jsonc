@@ -1,0 +1,16 @@
+{
+  "default": true,
+  "MD003": { "style": "atx" },
+  "MD004": { "style": "dash" },
+  "MD013": false,
+  "MD028": false,
+  "MD029": { "style": "ordered" },
+  "MD033": false,
+  "MD035": { "style": "---" },
+  "MD046": { "style": "fenced" },
+  "MD048": { "style": "backtick" },
+  "MD049": { "style": "asterisk" },
+  "MD050": { "style": "asterisk" },
+  "MD055": { "style": "leading_and_trailing" },
+  "MD060": { "style": "compact" }
+}

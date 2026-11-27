@@ -11,12 +11,13 @@ Shared CI for Kurokesu repos: reusable GitHub Actions workflows, canonical relea
 | `kernel-code-style.yml` | clang-format plus kernel checkpatch, profile per `platform` input | driver repo `main` shim |
 | `rpi-kmod-build.yml` | cross-compile an RPi driver module and its overlay against `raspberrypi/linux` | driver repo `main` shim |
 | `dkms-version-guard.yml` | fail a PR that changes packaged content without moving `PACKAGE_VERSION` | driver repo `main` shim |
+| `markdown-lint.yml` | markdownlint over every Markdown file against shared `.markdownlint.jsonc` | any repo `main` shim |
 | `dkms-build.yml` | DKMS source package plus arch:all `.deb` in a clean container, callers pass nothing repo-specific | packaging branch `ci.yml` shim |
 | `dkms-release.yml` | release pipeline on `debian/*` tag push: verify tags, build, sign, publish | packaging branch `release.yml` shim |
 | `deb-sign.yml` | bundle artifacts, sign `SHA256SUMS` with archive key, self-verify | `dkms-release.yml` |
 | `deb-publish.yml` | GitHub draft release from `release-assets` artifact, re-run refreshes assets | `dkms-release.yml` |
 
-`selftest.yml` is this repo's own CI. It runs `dkms-build.yml` against dummy DKMS fixtures on `selftest/*` orphan branches, one plain-version pair and one semver pre-release pair. It also replays `dkms-version-guard.yml` over scratch repo fixtures (`tests/version-guard-cases.sh`). Sign and publish have no selftest.
+`selftest.yml` is this repo's own CI. It runs `dkms-build.yml` against dummy DKMS fixtures on `selftest/*` orphan branches, one plain-version pair and one semver pre-release pair. It also replays `dkms-version-guard.yml` over scratch repo fixtures (`tests/version-guard-cases.sh`) and runs `markdown-lint.yml` over this repo's own Markdown. Sign and publish have no selftest.
 
 ## Kernel code style
 
@@ -82,6 +83,26 @@ permissions:
 jobs:
   dkms:
     uses: Kurokesu/ci/.github/workflows/dkms-version-guard.yml@main
+```
+
+## Markdown lint
+
+markdownlint over every Markdown file in caller repo. One shared rule set in [`.markdownlint.jsonc`](.markdownlint.jsonc), editors can point at it too.
+
+Caller shim, `lint.yml` on `main`:
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  docs:
+    uses: Kurokesu/ci/.github/workflows/markdown-lint.yml@main
 ```
 
 ## DKMS release family
